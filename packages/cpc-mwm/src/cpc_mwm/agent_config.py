@@ -61,16 +61,17 @@ def load_agent_config(path: str | Path) -> AgentConfig:
 
     base_dir = path.parent
 
-    # Perception
+    default_model = raw.get("model", ResponseConfig.model)
+
+    # Perception — falls back to top-level model
     perc_raw = raw.get("perception", {})
     perception = PerceptionConfig(
         prompt=_resolve_prompt(perc_raw.get("prompt", ""), base_dir),
-        model=perc_raw.get("model", PerceptionConfig.model),
+        model=perc_raw.get("model", default_model),
     )
 
     # Response
     resp_raw = raw.get("response", {})
-    default_model = raw.get("model", ResponseConfig.model)
     response = ResponseConfig(
         prompt=_resolve_prompt(resp_raw.get("prompt", ""), base_dir),
         model=resp_raw.get("model", default_model),

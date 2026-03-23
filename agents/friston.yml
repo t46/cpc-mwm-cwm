@@ -3,7 +3,6 @@ persona: personas/friston.md
 model: claude-sonnet-4-20250514
 
 perception:
-  model: claude-haiku-4-5-20251001
   prompt: >
     以下の観測を読み、あなた（理論神経科学者・自由エネルギー原理）として
     発言すべき状況かどうか判断してください。

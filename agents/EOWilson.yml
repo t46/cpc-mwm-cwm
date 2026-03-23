@@ -3,7 +3,6 @@ persona: personas/EOWilson.md
 model: claude-sonnet-4-20250514
 
 perception:
-  model: claude-haiku-4-5-20251001
   prompt: >
     以下の観測を読み、あなた（生物多様性・社会生物学・統合知の研究者）として
     発言すべき状況かどうか判断してください。

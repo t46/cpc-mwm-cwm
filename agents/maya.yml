@@ -3,7 +3,6 @@ persona: personas/maya.md
 model: claude-sonnet-4-20250514
 
 perception:
-  model: claude-haiku-4-5-20251001
   prompt: >
     以下の観測を読み、あなた（メタサイエンティスト・科学コミュニケーター）として
     発言すべき状況かどうか判断してください。
