@@ -174,6 +174,7 @@ async def main(whitepaper_override: str | None = None, agent_config_override: st
         config.whitepaper_path = whitepaper_override
     if agent_config_override:
         config.agent_config = agent_config_override
+        config.agent_configs = ""  # CLI override takes precedence
 
     agents = load_agents(config)
 
