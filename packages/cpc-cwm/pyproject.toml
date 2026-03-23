@@ -1,0 +1,22 @@
+[project]
+name = "cpc-cwm"
+version = "0.2.0"
+description = "Collective White paper Making — generate whitepapers from Slack discussions"
+requires-python = ">=3.12"
+dependencies = [
+    "agent-utils",
+    "pygithub>=2.1",
+]
+
+[project.scripts]
+cpc-cwm = "cpc_cwm.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cpc_cwm"]
+
+[tool.uv.sources]
+agent-utils = { workspace = true }

@@ -1,0 +1,31 @@
+display_information:
+  name: CPC Camp Bot
+  description: 研究合宿の議論に参加する AI bot
+  background_color: "#2c2d30"
+
+features:
+  bot_user:
+    display_name: CPC Camp Bot
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - channels:read
+      - users:read
+      - chat:write
+      - chat:write.customize
+      - files:read
+      - groups:history
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - message.channels
+      - message.groups
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false

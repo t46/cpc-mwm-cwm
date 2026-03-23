@@ -1,0 +1,28 @@
+[project]
+name = "cpc-mwm"
+version = "0.2.0"
+description = "Multi-agent White paper Meeting — AI personas discuss in Slack"
+requires-python = ">=3.12"
+dependencies = [
+    "agent-utils",
+    "slack-bolt>=1.18",
+    "pymupdf>=1.24",
+    "aiohttp>=3.9",
+    "sounddevice>=0.4",
+    "faster-whisper>=1.0",
+    "onnxruntime>=1.19,<1.24",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+cpc-mwm = "cpc_mwm.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cpc_mwm"]
+
+[tool.uv.sources]
+agent-utils = { workspace = true }

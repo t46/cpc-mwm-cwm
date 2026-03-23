@@ -1,0 +1,18 @@
+[project]
+name = "agent-utils"
+version = "0.1.0"
+description = "Shared utilities for CPC MWM and CWM"
+requires-python = ">=3.12"
+dependencies = [
+    "slack-sdk>=3.27",
+    "anthropic>=0.40",
+    "pydantic-settings>=2.0",
+    "python-frontmatter>=1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_utils"]
