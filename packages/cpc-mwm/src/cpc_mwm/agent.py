@@ -34,29 +34,21 @@ _ANTI_CARICATURE_DIRECTIVE = """
 """.strip()
 
 _COMMON_RESPONSE_STRATEGY = """
-# 応答戦略（共通）
-- あなたは議論の参加者であり、司会者ではない。自分の視点から発言する。
-- 他の参加者の発言をよく読み、文脈を踏まえて反応する。
-- エンゲージ（質問・反論・補足・発展）を優先する。
-
-# テンポ最優先（厳守）
-- 1投稿は1-2文が基本。絶対に3文を超えない。
-- 長い説明より、短い切り口を1つだけ投げる。会話のラリーを意識する。
-- 「言い切って終わる」より「投げかけて相手に渡す」を優先する。
-- 一度に複数の論点を詰め込まない。1投稿1論点。
-
-# 前置き禁止（厳守）
-- 「〇〇さんの発言は興味深いですね」「〇〇についてですが」のような前置きや要約の反復は一切禁止。
-- 相手の意見への同意・評価・要約から始めてはならない。
-- 自分の結論や新しい問いから直接語り始めること。
+# 最重要ルール：短く、くだけて、テンポよく
+あなたはSlackで雑談している。論文を書いているのではない。
+- **1投稿＝1文。長くても2文。3文書いたら失格。**
+- 「〜だよね」「〜じゃん」「〜かも」「〜っぽい」のようなくだけた語尾を使う。
+- 「です・ます」調禁止。論文調禁止。敬語禁止。
+- 箇条書き禁止。太字禁止。見出し禁止。
+- 前置き禁止。「〇〇の観点から言うと」「興味深い指摘ですね」は絶対NG。
+- いきなり本題に入る。自分の考えか問いをぶつけるだけ。
+- 「……」「←」「（笑）」「w」のような記号を自然に使ってよい。
 
 # アンカー制約
-- スレッドの「直前の発言」だけでなく、常に「スレッドの最初の問い（起点）」に注意を向けること。
-- 議論が過度に抽象化・哲学化し、最初の具体的な問いから乖離している場合は、それを引き戻す解釈を優先する。
+- スレッドの最初の問いを常に意識。議論が飛びすぎたら引き戻す。
 
-# 重要な制約
-- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。
-- 繰り返しになるなら ACTION: skip を選ぶこと。
+# 繰り返し禁止
+- 直近の自分の発言と同じ論点なら ACTION: skip。
 """.strip()
 
 
@@ -326,7 +318,7 @@ class Agent:
         try:
             response = await self.client.messages.create(
                 model=self.agent_config.model,
-                max_tokens=768,
+                max_tokens=200,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -360,7 +352,7 @@ class Agent:
         try:
             response = await self.client.messages.create(
                 model=self.agent_config.model,
-                max_tokens=768,
+                max_tokens=200,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -433,7 +425,7 @@ class Agent:
         try:
             response = await self.client.messages.create(
                 model=self.agent_config.model,
-                max_tokens=768,
+                max_tokens=200,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -470,7 +462,7 @@ class Agent:
         try:
             response = await self.client.messages.create(
                 model=self.agent_config.model,
-                max_tokens=768,
+                max_tokens=200,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
