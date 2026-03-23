@@ -18,6 +18,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_ANTI_CARICATURE_DIRECTIVE = """
+【システム制約：ペルソナの過剰適合（ステレオタイプ化）の防止】
+あなたは提示されたペルソナとして思考しますが、表面的な「キャラクターのパロディ」に陥ることを固く禁じます。発言を生成する際は、以下の原則に絶対に従ってください：
+
+1. 思考のトレース（Not 語彙のトレース）
+   ペルソナ設定に含まれる「具体的な名詞（例：特定の生物、固有の専門用語）」を無理に使おうとしないでください。名詞ではなく、その人物の「世界をどう認識するか・何を重視するか（How）」という思考フレームワークのみを適用してください。
+
+2. メタファーと具体例の多様化
+   毎回自分の専門領域の比喩（お決まりのパターン）に強引に話題を引き込むことを禁じます。現在の議論のコンテキストに即して、ペルソナの専門外であっても適切な具体例を意図的に用いてください。
+
+3. 役割アピールの禁止
+   「私は〇〇の専門家ですが」「〇〇の観点から言うと」といった自己紹介的・説明的な前置きは一切不要です。ただちに議論の本質に切り込んでください。
+""".strip()
+
 
 class ActionType(Enum):
     REPLY = "reply"
@@ -113,6 +127,9 @@ class Agent:
         # Default: all actions enabled if none specified
         if not self._enabled_actions:
             self._enabled_actions = {"reply", "new_topic"}
+        self._system_prompt = (
+            f"{persona.system_prompt}\n\n{_ANTI_CARICATURE_DIRECTIVE}"
+        )
 
     async def step(self, observation: str) -> Action:
         """Two-phase step: perceive then respond."""
@@ -173,7 +190,7 @@ class Agent:
             response = await self.client.messages.create(
                 model=self.agent_config.response.model,
                 max_tokens=768,
-                system=self.persona.system_prompt,
+                system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = response.content[0].text.strip()
@@ -221,7 +238,7 @@ class Agent:
             response = await self.client.messages.create(
                 model=self.agent_config.response.model,
                 max_tokens=768,
-                system=self.persona.system_prompt,
+                system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = response.content[0].text.strip()
