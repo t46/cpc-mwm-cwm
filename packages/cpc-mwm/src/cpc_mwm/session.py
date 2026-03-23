@@ -189,8 +189,8 @@ class SessionManager:
     def get_thread_candidates(self, persona_name: str, config: MwmConfig) -> list[Message]:
         """Get recent top-level messages eligible for thread engagement.
 
-        Returns messages from other personas within the age window,
-        with fewer than max_thread_replies.
+        Returns top-level messages within the age window that have human
+        replies or are from other personas, with fewer than max_thread_replies.
         """
         session = self.current_session
         if not session or not session.bot_messages:
@@ -204,12 +204,19 @@ class SessionManager:
             age = (now - msg.timestamp).total_seconds()
             if age > max_age:
                 break
-            if msg.user != persona_name and msg.is_bot and not msg.thread_ts and msg.ts:
-                reply_count = sum(
-                    1 for m in session.bot_messages if m.thread_ts == msg.ts
-                )
-                if reply_count < config.max_thread_replies:
-                    candidates.append(msg)
+            # Only consider top-level messages (not thread replies)
+            if msg.thread_ts or not msg.ts:
+                continue
+
+            replies = [m for m in session.bot_messages if m.thread_ts == msg.ts]
+            reply_count = len(replies)
+            if reply_count >= config.max_thread_replies:
+                continue
+
+            # Include if: from another persona, OR has human replies
+            has_human_reply = any(not r.is_bot for r in replies)
+            if msg.user != persona_name or has_human_reply:
+                candidates.append(msg)
 
         return candidates
 
@@ -276,6 +283,15 @@ class SessionManager:
             parts.append("")
         else:
             parts.append("## エンゲージ可能なスレッド\nなし（新しいトピックを立てるか、SKIP してください）\n")
+
+        # Own recent posts (for repetition avoidance)
+        own_recent = [m for m in session.bot_messages if m.user == persona_name][-5:]
+        if own_recent:
+            parts.append(f"## あなた（{persona_name}）の直近の発言")
+            for msg in own_recent:
+                parts.append(f"- {msg.text[:200]}")
+            parts.append("⚠ 上記と同じ論点・表現を繰り返さないでください。新しい角度や具体例で展開してください。")
+            parts.append("")
 
         # Status info
         n = session.consecutive_bot_only_count

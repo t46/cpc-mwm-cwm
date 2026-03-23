@@ -142,15 +142,22 @@ def register_handlers(
             if not bot_id and not text.startswith("!"):
                 from datetime import datetime
 
+                thread_ts_val = event.get("thread_ts", "")
                 msg = Message(
                     user=user,
                     text=text,
                     ts=ts,
                     timestamp=datetime.fromtimestamp(float(ts)) if ts else datetime.now(),
                     is_bot=False,
-                    thread_ts=event.get("thread_ts", ""),
+                    thread_ts=thread_ts_val,
                 )
                 session_mgr.add_channel_message(msg)
+                logger.info("Human message in bot channel (thread_ts=%s): %s", thread_ts_val or "none", text[:50])
+                # Include human thread replies in bot_messages so agents
+                # can see and respond to thread engagement
+                if thread_ts_val:
+                    session_mgr.add_bot_message(msg)
+                    logger.info("Added human thread reply to bot_messages: %s", text[:50])
 
         # --- Session channel (read only, no writing) ---
         elif session_mgr.is_session_channel(channel):
@@ -188,11 +195,15 @@ async def _handle_session_start(
     session_channel = parts[3].strip().strip("<>#")
 
     session_mgr.start_session(session_name, session_channel)
+
+    # Fetch recent history from the session channel
+    history_count = await _backfill_channel_history(client, session_channel, session_mgr)
+
     await safe_post(
         client,
         config,
         f"セッション「{session_name}」を開始しました。\n"
-        f"チャンネル: <#{session_channel}> を監視中。",
+        f"チャンネル: <#{session_channel}> を監視中（過去メッセージ {history_count} 件取得済み）。",
     )
 
 
@@ -217,11 +228,15 @@ async def _handle_session_start_free(
     session_channel = parts[3].strip().strip("<>#")
 
     session_mgr.start_session(session_name, session_channel, mode="free")
+
+    # Fetch recent history from the session channel
+    history_count = await _backfill_channel_history(client, session_channel, session_mgr)
+
     await safe_post(
         client,
         config,
         f"フリーセッション「{session_name}」を開始しました（自律議論モード）。\n"
-        f"チャンネル: <#{session_channel}> を監視中。",
+        f"チャンネル: <#{session_channel}> を監視中（過去メッセージ {history_count} 件取得済み）。",
     )
 
 
@@ -247,6 +262,39 @@ async def _handle_session_status(
         f"議論メッセージ: {len(session.discussion_messages)} 件\n"
         f"bot メッセージ: {len(session.bot_messages)} 件",
     )
+
+
+async def _backfill_channel_history(
+    client,
+    channel_id: str,
+    session_mgr: SessionManager,
+    limit: int = 50,
+) -> int:
+    """Fetch recent messages from a channel and add them as discussion messages."""
+    from datetime import datetime
+
+    try:
+        result = await client.conversations_history(channel=channel_id, limit=limit)
+        messages = result.get("messages", [])
+        count = 0
+        for msg in reversed(messages):  # oldest first
+            if msg.get("subtype"):
+                continue
+            m = Message(
+                user=msg.get("user", "unknown"),
+                text=msg.get("text", ""),
+                ts=msg.get("ts", ""),
+                timestamp=datetime.fromtimestamp(float(msg["ts"])) if msg.get("ts") else datetime.now(),
+                is_bot=bool(msg.get("bot_id")),
+                thread_ts=msg.get("thread_ts", ""),
+            )
+            session_mgr.add_discussion(channel_id, m)
+            count += 1
+        logger.info("Backfilled %d messages from channel %s", count, channel_id)
+        return count
+    except Exception:
+        logger.exception("Failed to backfill history from %s", channel_id)
+        return 0
 
 
 async def _handle_pdf(

@@ -160,7 +160,11 @@ class Agent:
         prompt = (
             f"{observation}\n\n"
             "---\n"
-            f"# 応答戦略\n{self.agent_config.response.prompt}\n"
+            f"# 応答戦略\n{self.agent_config.response.prompt}\n\n"
+            "# 重要な制約\n"
+            "- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。\n"
+            "- 新しい具体例、別の角度、または他者の発言への直接的な応答で展開すること。\n"
+            "- 繰り返しになるなら ACTION: skip を選ぶこと。\n"
             "---\n\n"
             f"{action_instructions}"
         )

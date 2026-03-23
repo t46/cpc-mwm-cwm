@@ -77,13 +77,24 @@ async def periodic_response(
                         persona.name, action.thread_index, len(candidates),
                     )
 
-            await safe_post(
+            posted_ts = await safe_post(
                 app.client, config, action.message,
                 persona=persona, thread_ts=thread_ts,
             )
             now = datetime.now()
             session_mgr.current_session.last_bot_post_at = now
             session_mgr.current_session._persona_last_post_at[persona.name] = now
+            # Track own post in bot_messages so it appears as thread candidate
+            from agent_utils.models import Message as Msg
+            own_msg = Msg(
+                user=persona.name,
+                text=action.message,
+                ts=posted_ts,
+                timestamp=now,
+                is_bot=True,
+                thread_ts=thread_ts,
+            )
+            session_mgr.add_bot_message(own_msg)
             if thread_ts:
                 logger.info("[%s] Posted to thread", persona.name)
             else:
