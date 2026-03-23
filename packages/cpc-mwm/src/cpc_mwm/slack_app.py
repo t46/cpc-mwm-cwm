@@ -279,11 +279,6 @@ async def _backfill_channel_history(
     from datetime import datetime
 
     try:
-        # Ensure the bot has joined the channel so it can read history
-        try:
-            await client.conversations_join(channel=channel_id)
-        except Exception:
-            pass  # already in channel, or insufficient permissions
         result = await client.conversations_history(channel=channel_id, limit=limit)
         messages = result.get("messages", [])
         count = 0
