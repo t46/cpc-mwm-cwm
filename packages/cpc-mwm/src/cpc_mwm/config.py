@@ -7,10 +7,11 @@ class MwmConfig(BaseConfig):
     """MWM-specific configuration loaded from environment variables."""
 
     slack_app_token: str
-    bot_channel_id: str
+    mwm_bot_channel_id: str
     persona_file: str = "personas/ada.md"
     persona_files: str = ""  # Comma-separated list for multi-persona mode
     whitepaper_path: str = ""
+    strategy_path: str = "strategies/default.md"
     response_interval_seconds: int = 120
     enable_audio: bool = False
     audio_device: str | None = None

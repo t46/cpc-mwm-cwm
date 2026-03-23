@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import random
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -186,17 +185,44 @@ class SessionManager:
         # Respond if: new transcript, new discussion, or other bots said something
         return len(new_chunks) >= 3 or len(new_discussion) >= 1 or len(new_bot_msgs) >= 1
 
-    def get_context_for_prompt(self, persona_name: str = "") -> str:
-        """Assemble context string for the Claude API prompt.
 
-        Args:
-            persona_name: If provided, updates per-persona hash instead of shared state.
+    def get_thread_candidates(self, persona_name: str, config: MwmConfig) -> list[Message]:
+        """Get recent top-level messages eligible for thread engagement.
+
+        Returns messages from other personas within the age window,
+        with fewer than max_thread_replies.
+        """
+        session = self.current_session
+        if not session or not session.bot_messages:
+            return []
+
+        now = datetime.now()
+        max_age = config.thread_target_max_age_seconds
+
+        candidates: list[Message] = []
+        for msg in reversed(session.bot_messages):
+            age = (now - msg.timestamp).total_seconds()
+            if age > max_age:
+                break
+            if msg.user != persona_name and msg.is_bot and not msg.thread_ts and msg.ts:
+                reply_count = sum(
+                    1 for m in session.bot_messages if m.thread_ts == msg.ts
+                )
+                if reply_count < config.max_thread_replies:
+                    candidates.append(msg)
+
+        return candidates
+
+    def build_observation(self, persona_name: str, config: MwmConfig) -> str:
+        """Build the observation text that the LLM sees to make decisions.
+
+        Includes session context (slides, transcript, discussion) and
+        a numbered list of thread candidates for engagement.
         """
         session = self.current_session
         if not session:
             return ""
 
-        is_free = session.mode == "free"
         parts: list[str] = []
 
         # Slides
@@ -237,31 +263,25 @@ class SessionManager:
                     parts.append(f"{msg.user}: {msg.text}")
             parts.append("")
 
-        # Consecutive bot count guidance
-        n = session.consecutive_bot_only_count
-        if is_free:
-            if n < 5:
-                skip_guidance = "自然に続けてください。"
-            elif n < 10:
-                skip_guidance = "まとめに向かうか、本当に新しい視点がある場合のみ発言してください。"
-            else:
-                skip_guidance = "重要な発見がない限り SKIP してください。"
-
-            parts.append(
-                f"現在 {n} 回連続で bot のみの発言が続いています。{skip_guidance}\n\n"
-                "自由議論モードです。チャンネルの流れを読んで、自分から話題を提起したり、"
-                "他の bot の発言に反応したりして、自律的に議論を進めてください。\n"
-                "言うべきことが特にない場合は「SKIP」とだけ返してください。"
-            )
+        # Thread candidates
+        candidates = self.get_thread_candidates(persona_name, config)
+        if candidates:
+            parts.append("## エンゲージ可能なスレッド")
+            for i, msg in enumerate(candidates, 1):
+                replies = [m for m in session.bot_messages if m.thread_ts == msg.ts]
+                reply_count = len(replies)
+                parts.append(f"{i}. {msg.user}: {msg.text[:150]}（返信{reply_count}件）")
+                for reply in replies[-3:]:
+                    parts.append(f"   ↳ {reply.user}: {reply.text[:100]}")
+            parts.append("")
         else:
-            # Presentation mode instruction
-            parts.append(
-                "上記の発表内容と議論を踏まえて、あなたらしいコメントや質問を1つ投稿してください。\n"
-                "他の bot が興味深い発言をしていたら、それに応答しても構いません。\n"
-                "言うべきことが特にない場合は「SKIP」とだけ返してください。"
-            )
+            parts.append("## エンゲージ可能なスレッド\nなし（新しいトピックを立てるか、SKIP してください）\n")
 
-        # Update hash (per-persona or shared)
+        # Status info
+        n = session.consecutive_bot_only_count
+        parts.append(f"## 状態\n- bot のみの連続発言: {n}回\n- セッションモード: {session.mode}")
+
+        # Update hash
         context = "\n".join(parts)
         new_hash = self._compute_context_hash(session)
         if persona_name:
@@ -269,42 +289,6 @@ class SessionManager:
         else:
             session._last_context_hash = new_hash
         return context
-
-    def pick_thread_target(self, persona_name: str, config: MwmConfig) -> str:
-        """Pick a recent bot message to thread into, or return empty for top-level.
-
-        Only threads into messages from OTHER personas, within the age window,
-        with fewer than max replies, and with configurable probability.
-        """
-        session = self.current_session
-        if not session or not session.bot_messages:
-            return ""
-
-        if random.random() >= config.thread_probability:
-            return ""
-
-        now = datetime.now()
-        max_age = config.thread_target_max_age_seconds
-
-        # Find top-level bot messages from other personas within age window
-        candidates: list[Message] = []
-        for msg in reversed(session.bot_messages):
-            age = (now - msg.timestamp).total_seconds()
-            if age > max_age:
-                break
-            if msg.user != persona_name and msg.is_bot and not msg.thread_ts and msg.ts:
-                # Count existing thread replies
-                reply_count = sum(
-                    1 for m in session.bot_messages if m.thread_ts == msg.ts
-                )
-                if reply_count < config.max_thread_replies:
-                    candidates.append(msg)
-
-        if not candidates:
-            return ""
-
-        # Pick the most recent candidate
-        return candidates[0].ts
 
     def has_spontaneous_opportunity(self, config: MwmConfig) -> bool:
         """Check if conditions allow a spontaneous post."""

@@ -32,7 +32,7 @@ def main():
         "--channel",
         nargs="+",
         default=None,
-        help="Slack channel ID(s) to read from (or set SLACK_CHANNEL_IDS, comma-separated)",
+        help="Slack channel ID(s) to read from (or set CWM_SOURCE_CHANNEL_IDS, comma-separated)",
     )
     parser.add_argument(
         "--repo",
@@ -79,11 +79,11 @@ def main():
     # Resolve channels: CLI args > config
     channels = args.channel
     if not channels:
-        if config.slack_channel_ids:
-            channels = [c.strip() for c in config.slack_channel_ids.split(",") if c.strip()]
+        if config.cwm_source_channel_ids:
+            channels = [c.strip() for c in config.cwm_source_channel_ids.split(",") if c.strip()]
 
     if not channels:
-        sys.exit("Error: --channel or SLACK_CHANNEL_IDS required")
+        sys.exit("Error: --channel or CWM_SOURCE_CHANNEL_IDS required")
 
     if not args.local:
         if not config.github_token:

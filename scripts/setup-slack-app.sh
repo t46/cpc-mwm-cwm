@@ -43,35 +43,28 @@ RESPONSE=$(curl -s -X POST "https://slack.com/api/apps.manifest.create" \
     -H "Content-Type: application/json" \
     -d "{\"manifest\": ${MANIFEST_JSON}}")
 
-OK=$(echo "$RESPONSE" | yq -r '.ok')
+OK=$(echo "$RESPONSE" | yq -p=json -r '.ok')
 if [ "$OK" != "true" ]; then
-    ERROR=$(echo "$RESPONSE" | yq -r '.error // "unknown error"')
+    ERROR=$(echo "$RESPONSE" | yq -p=json -r '.error // "unknown error"')
     echo "エラー: App の作成に失敗しました: $ERROR"
-    echo "$RESPONSE" | yq -P
+    echo "$RESPONSE" | yq -p=json -P
     exit 1
 fi
 
-APP_ID=$(echo "$RESPONSE" | yq -r '.app_id')
+APP_ID=$(echo "$RESPONSE" | yq -p=json -r '.app_id')
 echo "App 作成完了: APP_ID=$APP_ID"
 
-# App-Level Token (Socket Mode 用) を生成
+# App-Level Token (Socket Mode 用) は API では生成できないため手動で取得
+APP_TOKEN=""
 echo ""
-echo "=== App-Level Token を生成中 ==="
-
-TOKEN_RESPONSE=$(curl -s -X POST "https://slack.com/api/apps.connections.token.generate" \
-    -H "Authorization: Bearer ${SLACK_CONFIG_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d "{\"app_id\": \"${APP_ID}\"}")
-
-TOKEN_OK=$(echo "$TOKEN_RESPONSE" | yq -r '.ok')
-if [ "$TOKEN_OK" = "true" ]; then
-    APP_TOKEN=$(echo "$TOKEN_RESPONSE" | yq -r '.token')
-    echo "App-Level Token 生成完了"
-else
-    echo "警告: App-Level Token の自動生成に失敗しました。"
-    echo "手動で生成してください: https://api.slack.com/apps/${APP_ID}/general"
-    APP_TOKEN=""
-fi
+echo "=== App-Level Token（手動生成が必要）==="
+echo "Slack API では App-Level Token の自動生成ができません。"
+echo "以下の手順で手動生成してください:"
+echo "  1. https://api.slack.com/apps/${APP_ID}/general にアクセス"
+echo "  2. 'App-Level Tokens' セクションで 'Generate Token and Scopes' をクリック"
+echo "  3. Token Name に任意の名前（例: socket-mode）を入力"
+echo "  4. Scope に 'connections:write' を追加"
+echo "  5. 'Generate' をクリックして xapp-... トークンをコピー"
 
 # .env ファイルに書き出し
 echo ""
@@ -82,7 +75,7 @@ if [ -f "$ENV_FILE" ]; then
     read -r confirm
     if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
         echo "中止しました。以下を手動で設定してください:"
-        echo "  SLACK_APP_TOKEN=${APP_TOKEN:-<手動で取得>}"
+        echo "  SLACK_APP_TOKEN=<手動で取得した xapp-... トークンを設定>"
         echo ""
         echo "Bot Token はワークスペースへのインストール後に取得できます:"
         echo "  https://api.slack.com/apps/${APP_ID}/oauth"
@@ -93,19 +86,19 @@ fi
 cat > "$ENV_FILE" << EOF
 # === Slack App（共通）===
 SLACK_BOT_TOKEN=<ワークスペースにインストール後に取得: https://api.slack.com/apps/${APP_ID}/oauth>
-SLACK_APP_TOKEN=${APP_TOKEN:-<手動で取得>}
+SLACK_APP_TOKEN=<手動で取得した xapp-... トークンを設定>
 
 # === 共通 ===
 ANTHROPIC_API_KEY=<Anthropic API キーを設定>
 MODEL_NAME=claude-sonnet-4-20250514
 
 # === CWM（ホワイトペーパー生成）===
-SLACK_CHANNEL_IDS=<読み取り対象チャンネル ID をカンマ区切りで設定>
+CWM_SOURCE_CHANNEL_IDS=<読み取り対象チャンネル ID をカンマ区切りで設定>
 GITHUB_TOKEN=<GitHub Token を設定（--local モードなら不要）>
 GITHUB_REPO=<owner/repo を設定（--local モードなら不要）>
 
 # === MWM（マルチエージェント議論 bot）===
-BOT_CHANNEL_ID=<bot チャンネルの ID を設定>
+MWM_BOT_CHANNEL_ID=<bot チャンネルの ID を設定>
 PERSONA_FILES=personas/ada.md,personas/karl.md,personas/maya.md
 WHITEPAPER_PATH=
 RESPONSE_INTERVAL_SECONDS=120
@@ -116,10 +109,11 @@ echo "${ENV_FILE} を作成しました。"
 
 echo ""
 echo "=== 残りの手動ステップ ==="
-echo "1. ワークスペースにインストール（ブラウザで認可が必要）:"
+echo "1. App-Level Token を生成（上記の手順参照）して ${ENV_FILE} の SLACK_APP_TOKEN に設定"
+echo "2. ワークスペースにインストール（ブラウザで認可が必要）:"
 echo "   https://api.slack.com/apps/${APP_ID}/oauth"
-echo "2. Bot User OAuth Token (xoxb-...) を ${ENV_FILE} の SLACK_BOT_TOKEN に設定"
-echo "3. ANTHROPIC_API_KEY、SLACK_CHANNEL_IDS、BOT_CHANNEL_ID を設定"
-echo "4. bot をチャンネルに招待: /invite @cpc-camp-bot"
+echo "3. Bot User OAuth Token (xoxb-...) を ${ENV_FILE} の SLACK_BOT_TOKEN に設定"
+echo "4. ANTHROPIC_API_KEY、CWM_SOURCE_CHANNEL_IDS、MWM_BOT_CHANNEL_ID を設定"
+echo "5. bot をチャンネルに招待: /invite @cpc-camp-bot"
 echo "   - CWM 用: 読み取り対象チャンネル"
 echo "   - MWM 用: bot チャンネル + セッションチャンネル"

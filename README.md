@@ -62,8 +62,8 @@ cp .env.example .env
 /invite @cpc-camp-bot
 ```
 
-- **CWM 用**: 読み取り対象チャンネル（`SLACK_CHANNEL_IDS` で指定するチャンネル）
-- **MWM 用**: bot チャンネル（`BOT_CHANNEL_ID`）+ セッションチャンネル
+- **CWM 用**: 読み取り対象チャンネル（`CWM_SOURCE_CHANNEL_IDS` で指定するチャンネル）
+- **MWM 用**: bot チャンネル（`MWM_BOT_CHANNEL_ID`）+ セッションチャンネル
 
 > bot を招待しないとそのチャンネルのメッセージを読み取れません。
 
@@ -198,10 +198,10 @@ ENABLE_AUDIO=true AUDIO_DEVICE="BlackHole 2ch" uv run cpc-mwm
 | `SLACK_APP_TOKEN` | MWM | Yes* | - | App-Level Token (`xapp-...`) — MWM 使用時のみ |
 | `ANTHROPIC_API_KEY` | 共通 | Yes | - | Anthropic API キー |
 | `MODEL_NAME` | 共通 | No | `claude-sonnet-4-20250514` | Claude モデル名 |
-| `SLACK_CHANNEL_IDS` | CWM | Yes* | - | 読み取り対象チャンネル（カンマ区切り）— CWM 使用時 |
+| `CWM_SOURCE_CHANNEL_IDS` | CWM | Yes* | - | 読み取り対象チャンネル（カンマ区切り）— CWM 使用時 |
 | `GITHUB_TOKEN` | CWM | No | - | GitHub Token（`--local` なら不要） |
 | `GITHUB_REPO` | CWM | No | - | GitHub リポジトリ（`--local` なら不要） |
-| `BOT_CHANNEL_ID` | MWM | Yes* | - | コマンド受付・応答投稿先チャンネル — MWM 使用時 |
+| `MWM_BOT_CHANNEL_ID` | MWM | Yes* | - | コマンド受付・応答投稿先チャンネル — MWM 使用時 |
 | `PERSONA_FILES` | MWM | No | `personas/ada.md` | ペルソナファイル（カンマ区切り） |
 | `WHITEPAPER_PATH` | MWM | No | - | ホワイトペーパーファイルパス |
 | `RESPONSE_INTERVAL_SECONDS` | MWM | No | `120` | 応答間隔（秒） |
@@ -214,8 +214,8 @@ ENABLE_AUDIO=true AUDIO_DEVICE="BlackHole 2ch" uv run cpc-mwm
 
 | 環境変数 | 使用元 | 意味 | アクセス |
 |---------|--------|------|---------|
-| `SLACK_CHANNEL_IDS` | CWM | メッセージを一括取得する対象チャンネル | 読み取り専用 |
-| `BOT_CHANNEL_ID` | MWM | コマンド受付 + bot の応答投稿先 | 読み書き |
+| `CWM_SOURCE_CHANNEL_IDS` | CWM | メッセージを一括取得する対象チャンネル | 読み取り専用 |
+| `MWM_BOT_CHANNEL_ID` | MWM | コマンド受付 + bot の応答投稿先 | 読み書き |
 | セッションチャンネル | MWM | `!session start` で動的に指定 | 読み取り専用 |
 
 全チャンネルで bot の招待（`/invite`）が必要です。

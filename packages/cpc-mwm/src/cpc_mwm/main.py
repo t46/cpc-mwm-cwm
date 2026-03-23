@@ -29,9 +29,9 @@ async def periodic_response(
     brain: Brain,
     config: MwmConfig,
     persona: Persona,
+    strategy: str,
 ) -> None:
-    """Periodically generate and post comments."""
-    # Random initial delay (0-60s) to stagger multiple bots
+    """Periodically observe and act based on strategy."""
     initial_delay = random.uniform(0, 60)
     logger.info(
         "[%s] Periodic response task started (interval=%ds, initial_delay=%.0fs)",
@@ -41,9 +41,7 @@ async def periodic_response(
     )
     await asyncio.sleep(initial_delay)
     while True:
-        # Add jitter (±30s) to avoid synchronized posting
         jitter = random.uniform(-30, 30)
-        # Use shorter interval for free discussion mode
         if session_mgr.current_session and session_mgr.current_session.mode == "free":
             interval = config.free_discussion_interval_seconds
         else:
@@ -57,26 +55,40 @@ async def periodic_response(
             logger.debug("[%s] Not enough new context, skipping", persona.name)
             continue
 
-        context = session_mgr.get_context_for_prompt(persona_name=persona.name)
-        comment = await brain.generate_comment(context)
+        # Build observation and let the brain decide
+        observation = session_mgr.build_observation(persona.name, config)
+        action = await brain.decide_and_generate(observation, strategy)
+        session_mgr.record_api_call()
 
-        if comment:
-            try:
-                thread_ts = session_mgr.pick_thread_target(persona.name, config)
-                await safe_post(
-                    app.client, config, comment,
-                    persona=persona, thread_ts=thread_ts,
-                )
-                now = datetime.now()
-                session_mgr.current_session.last_bot_post_at = now
-                session_mgr.current_session._persona_last_post_at[persona.name] = now
-                session_mgr.record_api_call()
-                if thread_ts:
-                    logger.info("[%s] Posted comment to bot channel (thread)", persona.name)
+        if action.kind == "skip" or not action.message:
+            continue
+
+        try:
+            thread_ts = ""
+            if action.kind == "engage" and action.thread_index is not None:
+                candidates = session_mgr.get_thread_candidates(persona.name, config)
+                idx = action.thread_index - 1  # 1-based to 0-based
+                if 0 <= idx < len(candidates):
+                    thread_ts = candidates[idx].ts
                 else:
-                    logger.info("[%s] Posted comment to bot channel", persona.name)
-            except Exception:
-                logger.exception("[%s] Failed to post comment", persona.name)
+                    logger.warning(
+                        "[%s] Invalid thread index %d (candidates: %d)",
+                        persona.name, action.thread_index, len(candidates),
+                    )
+
+            await safe_post(
+                app.client, config, action.message,
+                persona=persona, thread_ts=thread_ts,
+            )
+            now = datetime.now()
+            session_mgr.current_session.last_bot_post_at = now
+            session_mgr.current_session._persona_last_post_at[persona.name] = now
+            if thread_ts:
+                logger.info("[%s] Posted to thread", persona.name)
+            else:
+                logger.info("[%s] Posted new topic", persona.name)
+        except Exception:
+            logger.exception("[%s] Failed to post", persona.name)
 
 
 async def spontaneous_posting(
@@ -85,6 +97,7 @@ async def spontaneous_posting(
     brain: Brain,
     config: MwmConfig,
     persona: Persona,
+    strategy: str,
 ) -> None:
     """Periodically generate spontaneous topics even without a session."""
     initial_delay = random.uniform(60, 180)
@@ -98,7 +111,6 @@ async def spontaneous_posting(
         jitter = random.uniform(-300, 300)
         await asyncio.sleep(max(60, config.spontaneous_interval_seconds + jitter))
 
-        # Skip if presentation session is active (let reactive handle it)
         if session_mgr.current_session and session_mgr.current_session.mode == "presentation":
             continue
 
@@ -110,7 +122,7 @@ async def spontaneous_posting(
             continue
 
         context = session_mgr.get_spontaneous_context()
-        comment = await brain.generate_spontaneous_topic(context)
+        comment = await brain.generate_spontaneous_topic(context, strategy)
         session_mgr.record_api_call()
 
         if comment:
@@ -134,12 +146,24 @@ def load_personas(config: MwmConfig) -> list[Persona]:
     return [load_persona(p, whitepaper_content=whitepaper_content) for p in paths]
 
 
-async def main(whitepaper_override: str | None = None) -> None:
+def load_strategy(path: str) -> str:
+    """Load strategy text from a markdown file."""
+    p = Path(path)
+    if not p.exists():
+        logger.warning("Strategy file not found: %s, using empty strategy", path)
+        return ""
+    text = p.read_text()
+    logger.info("Loaded strategy from %s (%d chars)", path, len(text))
+    return text
+
+
+async def main(whitepaper_override: str | None = None, strategy_path: str | None = None) -> None:
     """Entry point for the camp bot."""
     config = MwmConfig()
     if whitepaper_override:
         config.whitepaper_path = whitepaper_override
     personas = load_personas(config)
+    strategy = load_strategy(strategy_path or config.strategy_path)
 
     for p in personas:
         logger.info("Loaded persona: %s (%s)", p.name, p.style)
@@ -148,13 +172,10 @@ async def main(whitepaper_override: str | None = None) -> None:
     session_mgr = SessionManager()
     persona_names = {p.name for p in personas}
 
-    # Create a Brain for each persona
     brains = [Brain(config, persona) for persona in personas]
 
-    # Register Slack event handlers (once, shared)
     register_handlers(app, session_mgr, config, persona_names=persona_names)
 
-    # Start audio capture if enabled
     if config.enable_audio:
         from cpc_mwm.audio_capture import AudioTranscriber
 
@@ -166,12 +187,14 @@ async def main(whitepaper_override: str | None = None) -> None:
         asyncio.create_task(transcriber.start(on_transcript))
         logger.info("Audio capture enabled (device=%s)", config.audio_device or "default")
 
-    # Start periodic response and spontaneous posting tasks for each persona
     for brain, persona in zip(brains, personas):
-        asyncio.create_task(periodic_response(app, session_mgr, brain, config, persona))
-        asyncio.create_task(spontaneous_posting(app, session_mgr, brain, config, persona))
+        asyncio.create_task(
+            periodic_response(app, session_mgr, brain, config, persona, strategy)
+        )
+        asyncio.create_task(
+            spontaneous_posting(app, session_mgr, brain, config, persona, strategy)
+        )
 
-    # Start Slack Socket Mode connection
     handler = AsyncSocketModeHandler(app, config.slack_app_token)
     names = ", ".join(p.name for p in personas)
     logger.info("Starting bot(s): %s", names)
@@ -186,8 +209,13 @@ def cli() -> None:
         default=None,
         help="ホワイトペーパーファイルパス（ペルソナに注入）",
     )
+    parser.add_argument(
+        "--strategy",
+        default=None,
+        help="戦略ファイルパス（デフォルト: strategies/default.md）",
+    )
     args = parser.parse_args()
-    asyncio.run(main(whitepaper_override=args.whitepaper))
+    asyncio.run(main(whitepaper_override=args.whitepaper, strategy_path=args.strategy))
 
 
 if __name__ == "__main__":

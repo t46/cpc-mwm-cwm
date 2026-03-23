@@ -26,7 +26,7 @@ async def safe_post(
     thread_ts: str = "",
 ) -> str:
     """Post a message only to the bot channel. Returns the posted message ts."""
-    kwargs: dict = {"channel": config.bot_channel_id, "text": text}
+    kwargs: dict = {"channel": config.mwm_bot_channel_id, "text": text}
     if persona:
         kwargs["username"] = persona.name
         kwargs["icon_emoji"] = persona.avatar_emoji
@@ -86,7 +86,7 @@ def register_handlers(
         ts = event.get("ts", "")
 
         # --- Bot channel ---
-        if channel == config.bot_channel_id:
+        if channel == config.mwm_bot_channel_id:
             # Session management commands
             if text.startswith("!session start-free "):
                 await _handle_session_start_free(text, client, config, session_mgr)
@@ -106,7 +106,7 @@ def register_handlers(
                 return
 
             if text.strip() == "!moltbook":
-                session_mgr.start_session("moltbook", config.bot_channel_id, mode="free")
+                session_mgr.start_session("moltbook", config.mwm_bot_channel_id, mode="free")
                 await safe_post(client, config, "Moltbook モードを開始しました。自由に議論します。")
                 return
 

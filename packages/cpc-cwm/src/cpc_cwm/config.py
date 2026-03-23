@@ -8,6 +8,6 @@ from agent_utils.config import BaseConfig
 class CwmConfig(BaseConfig):
     """Configuration for the CWM (Collaborative Whitepaper Machine)."""
 
-    slack_channel_ids: str = ""
+    cwm_source_channel_ids: str = ""
     github_token: str = ""
     github_repo: str = ""
