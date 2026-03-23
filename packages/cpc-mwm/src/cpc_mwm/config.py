@@ -8,9 +8,12 @@ class MwmConfig(BaseConfig):
 
     slack_app_token: str
     mwm_bot_channel_id: str
-    persona_file: str = "personas/ada.md"
-    persona_files: str = ""  # Comma-separated list for multi-persona mode
+    agent_config: str = "agents/ada.yml"
+    agent_configs: str = ""  # Comma-separated list for multi-agent mode
     whitepaper_path: str = "whitepapers/whitepaper.md"
+    # Deprecated — kept for backward compat, ignored when agent configs are used
+    persona_file: str = "personas/ada.md"
+    persona_files: str = ""
     strategy_path: str = "strategies/default.md"
     response_interval_seconds: int = 120
     enable_audio: bool = False

@@ -88,8 +88,11 @@ uv run cpc-cwm --channel C0AAA --limit 1000 --model claude-sonnet-4-20250514
 ### MWM — マルチエージェント議論 bot
 
 ```bash
-# 起動
+# 起動（デフォルト: agents/ada.yml）
 uv run cpc-mwm
+
+# エージェント設定を指定して起動
+uv run cpc-mwm --agent-config agents/karl.yml
 
 # ホワイトペーパーを注入して起動
 uv run cpc-mwm --whitepaper whitepapers/latest.md
@@ -115,20 +118,51 @@ uv run python scripts/orchestrate.py
 
 CWM でホワイトペーパーを生成し、その内容をペルソナに注入した状態で MWM を起動します。
 
-## ペルソナ
+## エージェント設定
 
-`personas/` ディレクトリの MD ファイルでペルソナを定義します。
+各エージェントは `agents/` ディレクトリの YAML ファイルで定義します。YAML config は **perception**（発言判断）と **response**（応答生成）の2フェーズを制御します。
 
 ### プリセット
 
-| ファイル | 名前 | スタイル |
-|---------|------|---------|
-| `ada.md` | Ada | 好奇心旺盛、異分野の知識を結びつける |
-| `karl.md` | Karl | 建設的に批判的、方法論と前提に焦点 |
-| `maya.md` | Maya | 発表間の繋がりを見出す統合的視点 |
-| `friston.md` | Friston | 理論神経科学者 |
+| ファイル | ペルソナ | スタイル |
+|---------|---------|---------|
+| `agents/ada.yml` | Ada | 記号創発とロボティクス、構成論的アプローチ |
+| `agents/karl.yml` | Karl | 科学哲学、前提を問い直す |
+| `agents/maya.yml` | Maya | メタサイエンス、分野間の架橋 |
+| `agents/friston.yml` | Friston | 自由エネルギー原理、理論神経科学 |
 
-### カスタムペルソナの作成
+### エージェント config の構造
+
+```yaml
+name: my_agent
+persona: personas/ada.md          # ペルソナ定義ファイル
+model: claude-sonnet-4-20250514   # デフォルトモデル
+
+perception:
+  model: claude-haiku-4-5-20251001  # 判断用の軽量モデル
+  prompt: >
+    以下に該当する場合 YES:
+    - 発言すべき条件...
+
+response:
+  prompt: >
+    応答スタイルの指示...
+
+actions:
+  reply:                          # スレッドへの返信
+    enabled: true
+  new_topic:                      # 新しいトピックを投稿
+    enabled: true
+```
+
+- **perception**: haiku で「発言すべきか」を YES/NO で高速判定
+- **response**: sonnet でペルソナに基づいた応答を生成
+- **actions**: コード側で定義されたアクションの有効/無効を切り替え
+- prompt フィールドは `.md` ファイルへの参照も可（例: `prompt: prompts/perception.md`）
+
+### ペルソナファイル
+
+`personas/` ディレクトリの MD ファイルでペルソナの人格を定義します。エージェント config の `persona` フィールドで参照します。
 
 ```markdown
 ---
@@ -141,28 +175,24 @@ avatar_emoji: ":robot_face:"
 
 ## あなたが読んだホワイトペーパー
 
-以下は、これまでの議論をまとめたホワイトペーパーです。この内容を踏まえて議論に参加してください。
-
 {{whitepaper}}
-
-## 行動指針
-- ここにボットの振る舞いを記述
 ```
 
-`{{whitepaper}}` プレースホルダーは、MWM 起動時に `--whitepaper` で指定したファイルの内容に置換されます。省略時は「ホワイトペーパーはまだ生成されていません」と表示されます。
+`{{whitepaper}}` プレースホルダーは `--whitepaper` で指定したファイルの内容に置換されます。
 
-### マルチ bot
+### マルチエージェント
 
-複数の bot を同時に動かす場合:
-
-1. Slack App を **bot ごとに作成**（別の表示名・アバター）
-2. ペルソナ MD ファイルを作成
-3. `.env.bot_name` ファイルをそれぞれ作成（トークンが異なる）
-4. 起動:
+#### 同一プロセスで複数エージェント
 
 ```bash
-uv run --env-file .env.ada python -m cpc_mwm.main &
-uv run --env-file .env.karl python -m cpc_mwm.main &
+AGENT_CONFIGS="agents/ada.yml,agents/karl.yml,agents/maya.yml" uv run cpc-mwm
+```
+
+#### 別プロセスで複数 bot
+
+```bash
+uv run --env-file .env.ada cpc-mwm --agent-config agents/ada.yml &
+uv run --env-file .env.karl cpc-mwm --agent-config agents/karl.yml &
 ```
 
 ## 音声キャプチャ（BlackHole + faster-whisper）
@@ -202,7 +232,8 @@ ENABLE_AUDIO=true AUDIO_DEVICE="BlackHole 2ch" uv run cpc-mwm
 | `GITHUB_TOKEN` | CWM | No | - | GitHub Token（`--local` なら不要） |
 | `GITHUB_REPO` | CWM | No | - | GitHub リポジトリ（`--local` なら不要） |
 | `MWM_BOT_CHANNEL_ID` | MWM | Yes* | - | コマンド受付・応答投稿先チャンネル — MWM 使用時 |
-| `PERSONA_FILES` | MWM | No | `personas/ada.md` | ペルソナファイル（カンマ区切り） |
+| `AGENT_CONFIG` | MWM | No | `agents/ada.yml` | エージェント設定 YAML ファイル |
+| `AGENT_CONFIGS` | MWM | No | - | 複数エージェント設定（カンマ区切り） |
 | `WHITEPAPER_PATH` | MWM | No | - | ホワイトペーパーファイルパス |
 | `RESPONSE_INTERVAL_SECONDS` | MWM | No | `120` | 応答間隔（秒） |
 | `ENABLE_AUDIO` | MWM | No | `false` | 音声キャプチャ有効化 |
@@ -228,6 +259,7 @@ cpc-mwm-cwm/
 │   ├── agent-utils/    # 共有ライブラリ（Slack, Claude, Config, Persona）
 │   ├── cpc-cwm/        # ホワイトペーパー生成
 │   └── cpc-mwm/        # マルチエージェント議論 bot
+├── agents/              # エージェント設定 YAML
 ├── personas/            # ペルソナ定義ファイル
 ├── whitepapers/         # 生成されたホワイトペーパー
 └── scripts/             # セットアップ・オーケストレーション

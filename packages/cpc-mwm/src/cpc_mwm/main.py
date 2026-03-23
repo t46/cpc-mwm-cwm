@@ -9,8 +9,9 @@ from pathlib import Path
 
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
-from agent_utils.persona import Persona, load_persona
-from cpc_mwm.brain import Brain
+from agent_utils.persona import load_persona
+from cpc_mwm.agent import ActionType, Agent
+from cpc_mwm.agent_config import load_agent_config
 from cpc_mwm.config import MwmConfig
 from cpc_mwm.session import SessionManager
 from cpc_mwm.slack_app import create_slack_app, register_handlers, safe_post
@@ -26,12 +27,11 @@ logger = logging.getLogger(__name__)
 async def periodic_response(
     app,
     session_mgr: SessionManager,
-    brain: Brain,
+    agent: Agent,
     config: MwmConfig,
-    persona: Persona,
-    strategy: str,
 ) -> None:
-    """Periodically observe and act based on strategy."""
+    """Periodically observe and act based on agent config."""
+    persona = agent.persona
     initial_delay = random.uniform(0, 60)
     logger.info(
         "[%s] Periodic response task started (interval=%ds, initial_delay=%.0fs)",
@@ -55,17 +55,18 @@ async def periodic_response(
             logger.debug("[%s] Not enough new context, skipping", persona.name)
             continue
 
-        # Build observation and let the brain decide
+        # Build observation and let the agent decide (perceive + respond)
         observation = session_mgr.build_observation(persona.name, config)
-        action = await brain.decide_and_generate(observation, strategy)
-        session_mgr.record_api_call()
+        action = await agent.step(observation)
+        for _ in range(action.api_calls):
+            session_mgr.record_api_call()
 
-        if action.kind == "skip" or not action.message:
+        if action.kind == ActionType.SKIP or not action.message:
             continue
 
         try:
             thread_ts = ""
-            if action.kind == "engage" and action.thread_index is not None:
+            if action.kind == ActionType.REPLY and action.thread_index is not None:
                 candidates = session_mgr.get_thread_candidates(persona.name, config)
                 idx = action.thread_index - 1  # 1-based to 0-based
                 if 0 <= idx < len(candidates):
@@ -94,12 +95,11 @@ async def periodic_response(
 async def spontaneous_posting(
     app,
     session_mgr: SessionManager,
-    brain: Brain,
+    agent: Agent,
     config: MwmConfig,
-    persona: Persona,
-    strategy: str,
 ) -> None:
     """Periodically generate spontaneous topics even without a session."""
+    persona = agent.persona
     initial_delay = random.uniform(60, 180)
     logger.info(
         "[%s] Spontaneous posting task started (interval=%ds)",
@@ -122,8 +122,9 @@ async def spontaneous_posting(
             continue
 
         context = session_mgr.get_spontaneous_context()
-        comment = await brain.generate_spontaneous_topic(context, strategy)
-        session_mgr.record_api_call()
+        comment, api_calls = await agent.step_spontaneous(context)
+        for _ in range(api_calls):
+            session_mgr.record_api_call()
 
         if comment:
             try:
@@ -134,45 +135,43 @@ async def spontaneous_posting(
                 logger.exception("[%s] Failed to post spontaneous topic", persona.name)
 
 
-def load_personas(config: MwmConfig) -> list[Persona]:
-    """Load personas from config. Uses persona_files if set, otherwise persona_file."""
+def load_agents(config: MwmConfig) -> list[Agent]:
+    """Load agents from YAML config files."""
     whitepaper_content = ""
     if config.whitepaper_path:
-        whitepaper_content = Path(config.whitepaper_path).read_text()
-    if config.persona_files:
-        paths = [p.strip() for p in config.persona_files.split(",") if p.strip()]
+        wp_path = Path(config.whitepaper_path)
+        if wp_path.is_file():
+            whitepaper_content = wp_path.read_text()
+
+    if config.agent_configs:
+        paths = [p.strip() for p in config.agent_configs.split(",") if p.strip()]
     else:
-        paths = [config.persona_file]
-    return [load_persona(p, whitepaper_content=whitepaper_content) for p in paths]
+        paths = [config.agent_config]
+
+    agents: list[Agent] = []
+    for path in paths:
+        agent_cfg = load_agent_config(path)
+        persona = load_persona(agent_cfg.persona, whitepaper_content=whitepaper_content)
+        agents.append(Agent(agent_cfg, persona, config))
+    return agents
 
 
-def load_strategy(path: str) -> str:
-    """Load strategy text from a markdown file."""
-    p = Path(path)
-    if not p.exists():
-        logger.warning("Strategy file not found: %s, using empty strategy", path)
-        return ""
-    text = p.read_text()
-    logger.info("Loaded strategy from %s (%d chars)", path, len(text))
-    return text
-
-
-async def main(whitepaper_override: str | None = None, strategy_path: str | None = None) -> None:
+async def main(whitepaper_override: str | None = None, agent_config_override: str | None = None) -> None:
     """Entry point for the camp bot."""
     config = MwmConfig()
     if whitepaper_override:
         config.whitepaper_path = whitepaper_override
-    personas = load_personas(config)
-    strategy = load_strategy(strategy_path or config.strategy_path)
+    if agent_config_override:
+        config.agent_config = agent_config_override
 
-    for p in personas:
-        logger.info("Loaded persona: %s (%s)", p.name, p.style)
+    agents = load_agents(config)
+
+    for agent in agents:
+        logger.info("Loaded agent: %s (%s)", agent.persona.name, agent.persona.style)
 
     app = create_slack_app(config)
     session_mgr = SessionManager()
-    persona_names = {p.name for p in personas}
-
-    brains = [Brain(config, persona) for persona in personas]
+    persona_names = {a.persona.name for a in agents}
 
     register_handlers(app, session_mgr, config, persona_names=persona_names)
 
@@ -187,16 +186,16 @@ async def main(whitepaper_override: str | None = None, strategy_path: str | None
         asyncio.create_task(transcriber.start(on_transcript))
         logger.info("Audio capture enabled (device=%s)", config.audio_device or "default")
 
-    for brain, persona in zip(brains, personas):
+    for agent in agents:
         asyncio.create_task(
-            periodic_response(app, session_mgr, brain, config, persona, strategy)
+            periodic_response(app, session_mgr, agent, config)
         )
         asyncio.create_task(
-            spontaneous_posting(app, session_mgr, brain, config, persona, strategy)
+            spontaneous_posting(app, session_mgr, agent, config)
         )
 
     handler = AsyncSocketModeHandler(app, config.slack_app_token)
-    names = ", ".join(p.name for p in personas)
+    names = ", ".join(a.persona.name for a in agents)
     logger.info("Starting bot(s): %s", names)
     await handler.start_async()
 
@@ -210,12 +209,12 @@ def cli() -> None:
         help="ホワイトペーパーファイルパス（ペルソナに注入）",
     )
     parser.add_argument(
-        "--strategy",
+        "--agent-config",
         default=None,
-        help="戦略ファイルパス（デフォルト: strategies/default.md）",
+        help="エージェント設定 YAML ファイルパス（デフォルト: agents/ada.yml）",
     )
     args = parser.parse_args()
-    asyncio.run(main(whitepaper_override=args.whitepaper, strategy_path=args.strategy))
+    asyncio.run(main(whitepaper_override=args.whitepaper, agent_config_override=args.agent_config))
 
 
 if __name__ == "__main__":

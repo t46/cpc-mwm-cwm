@@ -10,7 +10,6 @@ from cpc_mwm.slides import download_file_from_slack, extract_slide_texts
 from cpc_mwm.transcript import parse_vtt
 
 if TYPE_CHECKING:
-    from cpc_mwm.brain import Brain
     from cpc_mwm.config import MwmConfig
     from agent_utils.persona import Persona
     from cpc_mwm.session import SessionManager

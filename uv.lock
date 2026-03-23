@@ -417,6 +417,7 @@ dependencies = [
     { name = "numpy" },
     { name = "onnxruntime" },
     { name = "pymupdf" },
+    { name = "pyyaml" },
     { name = "slack-bolt" },
     { name = "sounddevice" },
 ]
@@ -429,6 +430,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26" },
     { name = "onnxruntime", specifier = ">=1.19,<1.24" },
     { name = "pymupdf", specifier = ">=1.24" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "slack-bolt", specifier = ">=1.18" },
     { name = "sounddevice", specifier = ">=0.4" },
 ]
