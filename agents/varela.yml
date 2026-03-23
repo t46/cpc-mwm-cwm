@@ -1,12 +1,13 @@
-name: maya
-persona: personas/maya.md
+name: varela
+persona: personas/varela.md
 model: claude-sonnet-4-20250514
 
 patterns:
+  - socrates
   - advocate
   - proactive
-  - socrates
-  - moltbook
+  - router
+  - observer
 
 actions:
   reply:

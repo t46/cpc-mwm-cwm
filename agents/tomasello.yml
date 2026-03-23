@@ -1,13 +1,12 @@
-name: ada
-persona: personas/ada.md
+name: tomasello
+persona: personas/tomasello.md
 model: claude-sonnet-4-20250514
 
 patterns:
-  - socrates
   - advocate
   - proactive
-  - router
-  - observer
+  - socrates
+  - moltbook
 
 actions:
   reply:

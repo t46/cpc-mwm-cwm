@@ -1,10 +1,10 @@
-name: karl
-persona: personas/karl.md
+name: chomsky
+persona: personas/chomsky.md
 model: claude-sonnet-4-20250514
 
 patterns:
   - observer
-  - router
+  - advocate
   - socrates
   - notebook
 
