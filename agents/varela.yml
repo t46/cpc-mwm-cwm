@@ -8,6 +8,7 @@ patterns:
   - proactive
   - router
   - observer
+  - jester
 
 actions:
   reply:
