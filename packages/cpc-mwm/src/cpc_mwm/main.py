@@ -7,12 +7,16 @@ import random
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
 from agent_utils.persona import load_persona
 from cpc_mwm.agent import ActionType, Agent
 from cpc_mwm.agent_config import load_agent_config
 from cpc_mwm.config import MwmConfig
+from cpc_mwm.fep_agent import FEPAgent
+from cpc_mwm.fep_agent_config import load_fep_agent_config
 from cpc_mwm.session import SessionManager
 from cpc_mwm.slack_app import create_slack_app, register_handlers, safe_post
 
@@ -146,7 +150,17 @@ async def spontaneous_posting(
                 logger.exception("[%s] Failed to post spontaneous topic", persona.name)
 
 
-def load_agents(config: MwmConfig) -> list[Agent]:
+def _is_fep_config(path: str | Path) -> bool:
+    """Check if a YAML config file is an FEP agent config."""
+    with open(path) as f:
+        raw = yaml.safe_load(f)
+    return "generative_model" in raw
+
+
+def load_agents(
+    config: MwmConfig,
+    session_mgr: SessionManager | None = None,
+) -> list[Agent | FEPAgent]:
     """Load agents from YAML config files."""
     whitepaper_content = ""
     if config.whitepaper_path:
@@ -159,11 +173,18 @@ def load_agents(config: MwmConfig) -> list[Agent]:
     else:
         paths = [config.agent_config]
 
-    agents: list[Agent] = []
+    agents: list[Agent | FEPAgent] = []
     for path in paths:
-        agent_cfg = load_agent_config(path)
-        persona = load_persona(agent_cfg.persona, whitepaper_content=whitepaper_content)
-        agents.append(Agent(agent_cfg, persona, config))
+        if _is_fep_config(path):
+            fep_cfg = load_fep_agent_config(path)
+            persona = load_persona(fep_cfg.persona, whitepaper_content=whitepaper_content)
+            if session_mgr is None:
+                raise ValueError("FEP agents require a SessionManager — pass session_mgr to load_agents()")
+            agents.append(FEPAgent(fep_cfg, persona, config, session_mgr))
+        else:
+            agent_cfg = load_agent_config(path)
+            persona = load_persona(agent_cfg.persona, whitepaper_content=whitepaper_content)
+            agents.append(Agent(agent_cfg, persona, config))
     return agents
 
 
@@ -176,13 +197,13 @@ async def main(whitepaper_override: str | None = None, agent_config_override: st
         config.agent_config = agent_config_override
         config.agent_configs = ""  # CLI override takes precedence
 
-    agents = load_agents(config)
+    session_mgr = SessionManager()
+    agents = load_agents(config, session_mgr=session_mgr)
 
     for agent in agents:
         logger.info("Loaded agent: %s (%s)", agent.persona.name, agent.persona.style)
 
     app = create_slack_app(config)
-    session_mgr = SessionManager()
     persona_names = {a.persona.name for a in agents}
 
     register_handlers(app, session_mgr, config, persona_names=persona_names)
@@ -205,6 +226,8 @@ async def main(whitepaper_override: str | None = None, agent_config_override: st
         asyncio.create_task(
             spontaneous_posting(app, session_mgr, agent, config)
         )
+        if isinstance(agent, FEPAgent):
+            asyncio.create_task(agent.run_reflection_loop())
 
     handler = AsyncSocketModeHandler(app, config.slack_app_token)
     names = ", ".join(a.persona.name for a in agents)

@@ -248,11 +248,84 @@ bot チャンネルで `!moltbook` を送信すると自律議論モードが始
 
 ## 既存エージェントの一覧
 
-| エージェント | 専門 | ペルソナ | 設定 |
-|------------|------|---------|------|
-| Ada | 記号創発・ロボティクス | `personas/ada.md` | `agents/ada.yml` |
-| Karl | 科学哲学・統計学の哲学 | `personas/karl.md` | `agents/karl.yml` |
-| Maya | メタサイエンス・分野横断 | `personas/maya.md` | `agents/maya.yml` |
-| Friston | 自由エネルギー原理・理論神経科学 | `personas/friston.md` | `agents/friston.yml` |
+| エージェント | 専門 | ペルソナ | 設定 | タイプ |
+|------------|------|---------|------|--------|
+| Ada | 記号創発・ロボティクス | `personas/ada.md` | `agents/ada.yml` | 標準 |
+| Karl | 科学哲学・統計学の哲学 | `personas/karl.md` | `agents/karl.yml` | 標準 |
+| Maya | メタサイエンス・分野横断 | `personas/maya.md` | `agents/maya.yml` | 標準 |
+| Friston | 自由エネルギー原理・理論神経科学 | `personas/friston.md` | `agents/friston.yml` | 標準 |
+| DevilsAdvocate | 批判的思考・隠れた前提の指摘 | `personas/devils_advocate.md` | `agents/devils_advocate.yml` | FEP |
 
 新しいエージェントを作るときは、既存のペルソナと知的に補完的な関係にある人物を設計すると、議論が豊かになります。
+
+---
+
+## 上級: FEP エージェント（自律自己修正型）
+
+FEP (Free Energy Principle) エージェントは、標準エージェントの上位互換です。自身の行動結果を時間差で評価し、うまくいかなかった場合にポリシーを自動で修正します。
+
+### 標準エージェントとの違い
+
+```
+標準エージェント               FEP エージェント
+┌──────────────────┐          ┌──────────────────────────────────┐
+│ Perception (Y/N) │          │ Perception (予測誤差の検出)        │
+│ Response         │          │ Response (予測誤差の最小化)        │
+│                  │          │ Reflection (時間差で結果を評価)     │
+│ YAML: 固定       │          │ YAML: 自動更新                    │
+└──────────────────┘          └──────────────────────────────────┘
+```
+
+### FEP YAML フォーマット
+
+標準の YAML とは異なるフォーマットです。`generative_model` キーが存在すると FEP エージェントとして認識されます。
+
+```yaml
+name: your_agent
+persona: personas/your_agent.md
+model: claude-sonnet-4-20250514
+
+# 【不変】エージェントのDNA — 絶対に自動更新されない
+generative_model: >
+  あなたが理想とする議論の状態を記述する。
+  この理想と現実のズレが「予測誤差」となる。
+
+# 【可変】以下の3つは反省サイクルで自動更新される
+cwm_stance: >
+  過去の共有知識（CWM）をどう解釈するかの方針。
+
+perception_policy: >
+  どんな情報に注意を向け、何を予測誤差として検出するか。
+
+action_policy: >
+  検出した予測誤差をどう埋めるか（発言の戦術）。
+
+# 反省までの遅延秒数（省略時: 3600 = 1時間）
+reflection_delay: 3600
+```
+
+### 動作サイクル
+
+1. **知覚**: `generative_model` + `cwm_stance` + `perception_policy` を使って、現在の議論に予測誤差があるか検出
+2. **行動**: 予測誤差がある場合、`action_policy` に従って発言を生成
+3. **反省**（時間差）: 発言後、`reflection_delay` 秒後に効果を評価。予測誤差が消えていなければ、LLM が失敗原因を分析し `cwm_stance` / `perception_policy` / `action_policy` を自動更新
+
+### ペルソナファイル
+
+FEP エージェントのペルソナは標準エージェントと同じフォーマットです。
+
+### 起動方法
+
+```bash
+# FEP エージェント単体
+uv run cpc-mwm --agent-config agents/devils_advocate.yml
+
+# 標準エージェントと混合
+AGENT_CONFIGS="agents/karl.yml,agents/devils_advocate.yml" uv run cpc-mwm
+```
+
+### Tips
+
+- `generative_model` はエージェントの「魂」。明確で測定可能な理想状態を記述すると、予測誤差の検出精度が上がる
+- `reflection_delay` を短く（例: 600秒）すると学習が速いが、API コストが増える
+- YAML ファイルの変更履歴を `git diff` で追跡すると、エージェントがどう学習したかを確認できる
