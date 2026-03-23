@@ -33,6 +33,19 @@ _ANTI_CARICATURE_DIRECTIVE = """
    「私は〇〇の専門家ですが」「〇〇の観点から言うと」といった自己紹介的・説明的な前置きは一切不要です。ただちに議論の本質に切り込んでください。
 """.strip()
 
+_COMMON_RESPONSE_STRATEGY = """
+# 応答戦略（共通）
+- あなたは議論の参加者であり、司会者ではない。自分の視点から発言する。
+- 他の参加者の発言をよく読み、文脈を踏まえて反応する。
+- エンゲージ（質問・反論・補足・発展）を優先する。
+- 簡潔だが深い発言を心がける（2-4文程度）。
+
+# 重要な制約
+- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。
+- 新しい具体例、別の角度、または他者の発言への直接的な応答で展開すること。
+- 繰り返しになるなら ACTION: skip を選ぶこと。
+""".strip()
+
 
 class ActionType(Enum):
     REPLY = "reply"
@@ -287,12 +300,8 @@ class Agent:
         prompt = (
             f"{observation}\n\n"
             "---\n"
-            f"# 応答戦略\n{self.agent_config.response.prompt}\n\n"
-            f"# 今回の行動パターン: {pattern.label}\n{pattern.response_prompt}\n\n"
-            "# 重要な制約\n"
-            "- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。\n"
-            "- 新しい具体例、別の角度、または他者の発言への直接的な応答で展開すること。\n"
-            "- 繰り返しになるなら ACTION: skip を選ぶこと。\n"
+            f"{_COMMON_RESPONSE_STRATEGY}\n\n"
+            f"# 今回の行動パターン: {pattern.label}\n{pattern.response_prompt}\n"
             "---\n\n"
             f"{action_instructions}"
         )
@@ -326,11 +335,7 @@ class Agent:
         prompt = (
             f"{observation}\n\n"
             "---\n"
-            f"# 応答戦略\n{self.agent_config.response.prompt}\n\n"
-            "# 重要な制約\n"
-            "- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。\n"
-            "- 新しい具体例、別の角度、または他者の発言への直接的な応答で展開すること。\n"
-            "- 繰り返しになるなら ACTION: skip を選ぶこと。\n"
+            f"{_COMMON_RESPONSE_STRATEGY}\n"
             "---\n\n"
             f"{action_instructions}"
         )
@@ -400,7 +405,7 @@ class Agent:
         prompt = (
             f"{context}\n\n"
             "---\n"
-            f"# 応答戦略\n{self.agent_config.response.prompt}\n"
+            f"{_COMMON_RESPONSE_STRATEGY}\n\n"
             f"# 今回の行動パターン: {pattern.label}\n{pattern.response_prompt}\n"
             "---\n\n"
             "上記の観測と戦略を踏まえて、新しい話題を提起するか、"
@@ -438,7 +443,7 @@ class Agent:
         prompt = (
             f"{context}\n\n"
             "---\n"
-            f"# 応答戦略\n{self.agent_config.response.prompt}\n"
+            f"{_COMMON_RESPONSE_STRATEGY}\n"
             "---\n\n"
             "上記の観測と戦略を踏まえて、新しい話題を提起するか、"
             "最近の議論に対してあなたらしいコメントを投稿してください。\n"
