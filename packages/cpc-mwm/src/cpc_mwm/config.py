@@ -10,7 +10,7 @@ class MwmConfig(BaseConfig):
     mwm_bot_channel_id: str
     persona_file: str = "personas/ada.md"
     persona_files: str = ""  # Comma-separated list for multi-persona mode
-    whitepaper_path: str = ""
+    whitepaper_path: str = "whitepapers/whitepaper.md"
     strategy_path: str = "strategies/default.md"
     response_interval_seconds: int = 120
     enable_audio: bool = False

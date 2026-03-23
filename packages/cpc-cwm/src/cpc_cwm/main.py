@@ -56,8 +56,8 @@ def main():
     )
     parser.add_argument(
         "--local-path",
-        default="whitepaper.md",
-        help="Local file path when using --local (default: whitepaper.md)",
+        default="whitepapers/whitepaper.md",
+        help="Local file path when using --local (default: whitepapers/whitepaper.md)",
     )
     parser.add_argument(
         "--model",
