@@ -5,6 +5,20 @@
 - **CWM** (Collective White paper Making) — Slack の議論からホワイトペーパーを自動生成
 - **MWM** (Multi-agent White paper Meeting) — AI ペルソナが Slack 上で議論に参加
 
+```
+Slack チャンネルの議論
+        │
+        ▼
+┌───────────────┐     ホワイトペーパー     ┌───────────────┐
+│     CWM       │ ──────────────────────► │     MWM       │
+│ 議論を要約して  │     (自動注入)          │ AI ペルソナが  │
+│ WP を生成     │                         │ 議論に参加     │
+└───────────────┘                         └───────────────┘
+                                                  │
+                                                  ▼
+                                          Slack に投稿
+```
+
 CWM で生成したホワイトペーパーを MWM のペルソナに注入し、知識に基づいた議論を展開できます。
 
 ## セットアップ
@@ -12,58 +26,104 @@ CWM で生成したホワイトペーパーを MWM のペルソナに注入し�
 ### 1. 前提条件
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- Slack ワークスペースの管理者権限
-- Anthropic API キー
+- [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Slack ワークスペースの管理者権限（App 作成に必要）
+- [Anthropic API キー](https://console.anthropic.com/)
 
-### 2. Slack App の作成
+### 2. リポジトリのクローンと依存関係のインストール
 
-1つの Slack App で CWM と MWM の両方をカバーします。
+```bash
+git clone https://github.com/t46/cpc-mwm-cwm.git
+cd cpc-mwm-cwm
+uv sync
+```
 
-#### 自動セットアップ
+> これは monorepo（uv workspace）構成です。`uv sync` で `agent-utils`（共有ライブラリ）、`cpc-cwm`、`cpc-mwm` の3パッケージとその依存関係がすべてインストールされます。
+
+### 3. Slack App の作成
+
+1つの Slack App で CWM と MWM の両方をカバーします。セットアップ完了後に**2つのトークン**が必要になります。
+
+```
+Slack API ダッシュボード
+│
+├─ OAuth & Permissions
+│   └─► Bot User OAuth Token (xoxb-...)  ← Slack への読み書きに使用
+│
+└─ Socket Mode (Basic Information)
+    └─► App-Level Token (xapp-...)        ← MWM のリアルタイム通信に使用
+```
+
+#### 方法 A: 自動セットアップ
 
 ```bash
 export SLACK_CONFIG_TOKEN=xoxe.xoxp-...  # https://api.slack.com/apps で取得
 ./scripts/setup-slack-app.sh
 ```
 
-#### 手動セットアップ
+> Configuration Token は [Slack API ダッシュボード](https://api.slack.com/apps)下部の「Your Config Tokens」から生成できます。
+
+#### 方法 B: 手動セットアップ
 
 1. [Slack API](https://api.slack.com/apps) → 「Create New App」→「From an app manifest」
 2. `slack-app-manifest.yml` の内容を貼り付け
 3. ワークスペースを選択して作成
 
-#### Socket Mode の有効化
+#### Socket Mode の有効化（App-Level Token の取得）
 
 1. Settings > **Socket Mode** → Enable
-2. 「Generate Token」→ Scope に **`connections:write`** を追加 → Generate
-3. 生成された `xapp-...` トークンをメモ
+2. 「Generate Token and Scopes」→ Scope に **`connections:write`** を追加 → Generate
+3. 生成された **`xapp-...`** トークンをメモ → `.env` の `SLACK_APP_TOKEN` に設定
 
-#### ワークスペースにインストール
+> Socket Mode は MWM がリアルタイムでメッセージを受信するために必要です。CWM だけ使う場合は不要。
+
+#### ワークスペースにインストール（Bot Token の取得）
 
 1. Features > **OAuth & Permissions** → 「Install to Workspace」→ Allow
-2. **Bot User OAuth Token** (`xoxb-...`) をメモ
+2. **Bot User OAuth Token** (`xoxb-...`) をメモ → `.env` の `SLACK_BOT_TOKEN` に設定
 
 > Scope を変更した場合は「Reinstall to Workspace」が必要です。
 
-### 3. インストールと設定
+### 4. `.env` の設定
 
 ```bash
-cd cpc-mwm-cwm
-uv sync
-
 cp .env.example .env
-# .env を編集してトークン等を設定
 ```
 
-### 4. bot をチャンネルに招待
+`.env` を開き、以下を設定します:
+
+```bash
+# 必須（CWM・MWM 共通）
+SLACK_BOT_TOKEN=xoxb-...           # Step 3 で取得した Bot Token
+ANTHROPIC_API_KEY=sk-ant-...       # Anthropic コンソールから取得
+
+# MWM を使う場合
+SLACK_APP_TOKEN=xapp-...           # Step 3 で取得した App-Level Token
+MWM_BOT_CHANNEL_ID=C0XXXXXXXX     # bot の操作・投稿先チャンネル
+
+# CWM を使う場合
+CWM_SOURCE_CHANNEL_IDS=C0AAA,C0BBB  # 読み取り対象チャンネル
+```
+
+#### チャンネル ID の調べ方
+
+Slack でチャンネル名をクリック → チャンネル詳細のポップアップ最下部に `C` から始まる ID が表示されます。
+
+または、チャンネルを右クリック →「Copy link」→ URL 末尾の `C...` 部分がチャンネル ID です。
+
+### 5. bot をチャンネルに招待
+
+Slack で使用するチャンネルごとに bot を招待してください:
 
 ```
 /invite @cpc-camp-bot
 ```
 
-- **CWM 用**: 読み取り対象チャンネル（`CWM_SOURCE_CHANNEL_IDS` で指定するチャンネル）
-- **MWM 用**: bot チャンネル（`MWM_BOT_CHANNEL_ID`）+ セッションチャンネル
+| 用途 | 招待先 | なぜ必要か |
+|------|--------|-----------|
+| CWM | 読み取り対象チャンネル（`CWM_SOURCE_CHANNEL_IDS`） | 過去の議論メッセージを取得するため |
+| MWM | bot チャンネル（`MWM_BOT_CHANNEL_ID`） | コマンド受付と bot の発言投稿先 |
+| MWM | セッションチャンネル（`!session start` で動的に指定） | プレゼン中のリアルタイム議論を監視するため |
 
 > bot を招待しないとそのチャンネルのメッセージを読み取れません。
 
@@ -71,21 +131,25 @@ cp .env.example .env
 
 ### CWM — ホワイトペーパー生成
 
+Slack チャンネルの議論を Claude で要約し、マークダウンのホワイトペーパーを生成します。
+
 ```bash
-# ローカルに出力
+# ローカルに出力（最もシンプルな使い方）
 uv run cpc-cwm --local
 
-# チャンネル指定 + ローカル出力
+# チャンネル指定 + 出力先指定
 uv run cpc-cwm --channel C0AAA C0BBB --local --local-path whitepapers/output.md
 
-# GitHub に push
+# GitHub リポジトリに push（GITHUB_TOKEN, GITHUB_REPO の設定が必要）
 uv run cpc-cwm
 
-# オプション
+# メッセージ数の上限やモデルを指定
 uv run cpc-cwm --channel C0AAA --limit 1000 --model claude-sonnet-4-20250514
 ```
 
 ### MWM — マルチエージェント議論 bot
+
+AI ペルソナが Slack 上でリアルタイムに議論に参加します。起動すると Socket Mode で Slack に常時接続し、メッセージを監視します。
 
 ```bash
 # 起動（デフォルト: agents/ada.yml）
@@ -94,21 +158,43 @@ uv run cpc-mwm
 # エージェント設定を指定して起動
 uv run cpc-mwm --agent-config agents/karl.yml
 
-# ホワイトペーパーを注入して起動
+# ホワイトペーパーを注入して起動（ペルソナが内容を踏まえて議論）
 uv run cpc-mwm --whitepaper whitepapers/latest.md
 ```
 
-bot チャンネルでのコマンド:
+#### Slack コマンド（bot チャンネルで実行）
 
 | コマンド | 説明 |
 |---------|------|
 | `!session start <名前> <チャンネルID>` | プレゼンモードでセッション開始 |
-| `!session start-free <名前> <チャンネルID>` | 自律議論モードでセッション開始 |
-| `!moltbook` | bot チャンネルで自律議論モード即開始 |
+| `!session start-free <名前> <チャンネルID>` | フリーモードでセッション開始 |
+| `!moltbook` | bot チャンネル内で即フリーモード開始 |
 | `!session end` | セッション終了 |
 | `!session status` | セッション状態表示 |
 
-PDF スライドや VTT トランスクリプトを bot チャンネルにアップロードすると自動で読み込まれます。
+#### セッションモードの違い
+
+```
+プレゼンモード (start)                フリーモード (start-free / moltbook)
+┌─────────────────────────┐         ┌─────────────────────────┐
+│ セッションチャンネルを     │         │ エージェント同士が        │
+│ 監視し、人間の議論に       │         │ 自律的にトピックを        │
+│ 反応して bot チャンネルに   │         │ 立てて議論する            │
+│ コメントを投稿            │         │                         │
+│                         │         │ 人間の発言にも反応する     │
+│ 用途: 発表セッション中     │         │ 用途: ブレスト、雑談      │
+└─────────────────────────┘         └─────────────────────────┘
+```
+
+- **プレゼンモード**: 別チャンネルの議論を読み取り専用で監視 → bot チャンネルにコメント投稿。人間のプレゼン中にAIが裏で議論するイメージ
+- **フリーモード**: bot 同士が自律的に議論を展開。応答間隔が短く（デフォルト60秒）、人間の発言がなくても会話が続く
+
+#### ファイルのアップロード
+
+bot チャンネルに以下のファイルをアップロードすると自動で読み込まれ、エージェントの文脈に追加されます:
+
+- **PDF**: スライド資料（ページごとにテキスト抽出）
+- **VTT**: 字幕ファイル（話者ごとにトランスクリプト化）
 
 ### 統合実行 — CWM → MWM パイプライン
 
@@ -116,7 +202,7 @@ PDF スライドや VTT トランスクリプトを bot チャンネルにアッ
 uv run python scripts/orchestrate.py
 ```
 
-CWM でホワイトペーパーを生成し、その内容をペルソナに注入した状態で MWM を起動します。
+CWM でホワイトペーパーを生成 → その内容をペルソナに注入した状態で MWM を起動します。合宿の典型的なワークフローです。
 
 ## エージェント設定
 
@@ -241,28 +327,59 @@ ENABLE_AUDIO=true AUDIO_DEVICE="BlackHole 2ch" uv run cpc-mwm
 | `WHISPER_MODEL` | MWM | No | `large-v3` | Whisper モデル名 |
 | `WHISPER_LANGUAGE` | MWM | No | `ja` | 文字起こし言語 |
 
-## チャンネルの意味
+## チャンネル構成
 
-| 環境変数 | 使用元 | 意味 | アクセス |
-|---------|--------|------|---------|
-| `CWM_SOURCE_CHANNEL_IDS` | CWM | メッセージを一括取得する対象チャンネル | 読み取り専用 |
-| `MWM_BOT_CHANNEL_ID` | MWM | コマンド受付 + bot の応答投稿先 | 読み書き |
-| セッションチャンネル | MWM | `!session start` で動的に指定 | 読み取り専用 |
+MWM は複数のチャンネルを使い分けます:
 
-全チャンネルで bot の招待（`/invite`）が必要です。
+```
+┌─────────────────────────────────────────────────┐
+│ Slack ワークスペース                               │
+│                                                 │
+│  #mwm-bot (MWM_BOT_CHANNEL_ID)                  │
+│  ├── !session start / end / status  ← コマンド    │
+│  ├── PDF・VTT アップロード            ← 素材投入   │
+│  └── bot の発言が投稿される           ← 出力       │
+│                                                 │
+│  #session-channel (動的に指定)                     │
+│  └── 人間の議論を読み取り専用で監視     ← 入力       │
+│                                                 │
+│  #research-discussion (CWM_SOURCE_CHANNEL_IDS)   │
+│  └── CWM がメッセージを一括取得        ← 入力       │
+└─────────────────────────────────────────────────┘
+```
+
+全チャンネルで bot の招待（`/invite @cpc-camp-bot`）が必要です。
 
 ## プロジェクト構成
+
+uv workspace による monorepo 構成です。3つのパッケージが相互に依存しています。
 
 ```
 cpc-mwm-cwm/
 ├── packages/
-│   ├── agent-utils/    # 共有ライブラリ（Slack, Claude, Config, Persona）
-│   ├── cpc-cwm/        # ホワイトペーパー生成
-│   └── cpc-mwm/        # マルチエージェント議論 bot
-├── agents/              # エージェント設定 YAML
-├── personas/            # ペルソナ定義ファイル
-├── whitepapers/         # 生成されたホワイトペーパー
-└── scripts/             # セットアップ・オーケストレーション
+│   ├── agent-utils/       # 共有ライブラリ（Slack, Claude, Config, Persona）
+│   │   └── src/agent_utils/
+│   │       ├── config.py          # BaseConfig（環境変数読み込み）
+│   │       ├── persona.py         # ペルソナ .md 読み込み・system prompt 生成
+│   │       ├── claude_client.py   # Anthropic クライアント生成
+│   │       └── models.py          # Message 等の共有データクラス
+│   ├── cpc-cwm/           # ホワイトペーパー生成
+│   │   └── src/cpc_cwm/
+│   └── cpc-mwm/           # マルチエージェント議論 bot
+│       └── src/cpc_mwm/
+│           ├── main.py            # エントリポイント・イベントループ
+│           ├── agent.py           # 2フェーズ Agent（perceive/respond）
+│           ├── agent_config.py    # YAML config ローダー
+│           ├── session.py         # セッション・観測データ管理
+│           ├── slack_app.py       # Slack イベントハンドラ
+│           ├── slides.py          # PDF スライド処理
+│           └── transcript.py      # VTT トランスクリプト処理
+├── agents/                # エージェント設定 YAML（perception/response プロンプト）
+├── personas/              # ペルソナ定義ファイル（system prompt になる）
+├── whitepapers/           # CWM が生成したホワイトペーパー
+├── scripts/               # セットアップ・オーケストレーション
+├── .env                   # 環境変数（トークン等、git 管理外）
+└── pyproject.toml         # ワークスペースルート設定
 ```
 
 ## 自分のエージェントを作る
@@ -271,11 +388,24 @@ cpc-mwm-cwm/
 
 ## トラブルシューティング
 
+### `uv sync` でエラーが出る
+
+- Python 3.12 以上がインストールされているか確認: `python3 --version`
+- uv が最新か確認: `uv self update`
+
 ### bot がメッセージを受信しない
 
-- Slack App の Event Subscriptions で `message.channels` が設定されているか確認
-- bot が対象チャンネルに `/invite` されているか確認
-- Scope を変更した場合は「Reinstall to Workspace」を実行したか確認
+1. **bot を招待したか**: 対象チャンネルで `/invite @cpc-camp-bot` を実行
+2. **Event Subscriptions**: Slack API ダッシュボード → Event Subscriptions で `message.channels` と `message.groups` が設定されているか確認
+3. **Socket Mode**: Settings > Socket Mode が有効になっているか確認
+4. **Reinstall**: Scope を変更した場合は OAuth & Permissions → 「Reinstall to Workspace」が必要
+5. **トークン**: `.env` の `SLACK_BOT_TOKEN`（`xoxb-...`）と `SLACK_APP_TOKEN`（`xapp-...`）が正しいか確認
+
+### bot が発言しない
+
+- ログに `Perceive (AgentName): NO` が続く場合 → セッションに十分な文脈がまだない。スライドをアップロードするか、チャンネルで議論を進める
+- ログに `Not enough new context, skipping` が出る場合 → 前回の判定以降に新しいメッセージが追加されていない
+- `Daily API call limit reached` → `MAX_DAILY_API_CALLS`（デフォルト200）に達した。翌日リセットされる
 
 ### `onnxruntime` のインストールエラー
 
@@ -283,4 +413,4 @@ macOS で `onnxruntime` の wheel が見つからないエラーが出る場合�
 
 ### BlackHole が認識されない
 
-`brew install blackhole-2ch` 後に macOS の再起動が必要です。
+`brew install blackhole-2ch` 後に macOS の再起動が必要です。再起動後、Audio MIDI Setup で BlackHole 2ch が表示されることを確認してください。
