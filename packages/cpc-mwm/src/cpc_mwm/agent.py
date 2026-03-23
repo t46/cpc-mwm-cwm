@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -213,7 +214,14 @@ class Agent:
 
         Uses the same model as response (sonnet) with full observation.
         Returns the pattern name, or None for SKIP.
+        ~15% chance to force jester pattern (if available) since LLMs
+        never voluntarily pick it over serious patterns.
         """
+        # Force jester ~15% of the time
+        if "jester" in self.patterns and random.random() < 0.15:
+            logger.info("Pattern select (%s): jester (forced random)", self.persona.name)
+            return "jester"
+
         prompt = self._build_selector_prompt(observation)
         pattern_names = list(self.patterns.keys())
 
