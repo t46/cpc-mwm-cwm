@@ -256,7 +256,8 @@ class SessionManager:
             parts.append(f"## セッションチャンネルの議論（最新{len(recent_discussion)}件）")
             for msg in recent_discussion:
                 prefix = "[bot] " if msg.is_bot else ""
-                parts.append(f"{prefix}{msg.user}: {msg.text}")
+                ts = msg.timestamp.strftime("%H:%M:%S") if msg.timestamp else ""
+                parts.append(f"[{ts}] {prefix}{msg.user}: {msg.text}")
             parts.append("")
 
         # Bot channel messages (last 15), showing thread structure
@@ -264,10 +265,11 @@ class SessionManager:
             recent_bot = session.bot_messages[-15:]
             parts.append(f"## bot チャンネルの議論（最新{len(recent_bot)}件）")
             for msg in recent_bot:
+                ts = msg.timestamp.strftime("%H:%M:%S") if msg.timestamp else ""
                 if msg.thread_ts:
-                    parts.append(f"  ↳ {msg.user}: {msg.text}")
+                    parts.append(f"  ↳ [{ts}] {msg.user}: {msg.text}")
                 else:
-                    parts.append(f"{msg.user}: {msg.text}")
+                    parts.append(f"[{ts}] {msg.user}: {msg.text}")
             parts.append("")
 
         # Thread candidates
