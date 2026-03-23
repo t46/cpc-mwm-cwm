@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from agent_utils.persona import Persona
     from cpc_mwm.agent_config import AgentConfig
     from cpc_mwm.config import MwmConfig
+    from cpc_mwm.pattern_config import PatternConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ class Action:
     thread_index: int | None = None  # 1-based index for REPLY
     message: str = ""
     api_calls: int = 0  # Number of LLM API calls made to produce this action
+    pattern: str = ""  # Which UX pattern was selected (empty for legacy)
 
 
 def _parse_action(text: str, enabled_actions: set[str]) -> Action:
@@ -107,17 +109,19 @@ def _build_action_instructions(enabled_actions: set[str]) -> str:
 
 
 class Agent:
-    """Two-phase agent: perceive (haiku gate) then respond (sonnet generation)."""
+    """Two-phase agent: perceive (mode selector) then respond (pattern-aware)."""
 
     def __init__(
         self,
         agent_config: AgentConfig,
         persona: Persona,
         mwm_config: MwmConfig,
+        patterns: dict[str, PatternConfig] | None = None,
     ) -> None:
         self.agent_config = agent_config
         self.persona = persona
         self.mwm_config = mwm_config
+        self.patterns = patterns or {}
         self.client = create_async_client(mwm_config.anthropic_api_key)
         self._enabled_actions = {
             name
@@ -131,20 +135,95 @@ class Agent:
             f"{persona.system_prompt}\n\n{_ANTI_CARICATURE_DIRECTIVE}"
         )
 
-    async def step(self, observation: str) -> Action:
-        """Two-phase step: perceive then respond."""
-        if not observation.strip():
-            return Action(kind=ActionType.SKIP)
+    # ------------------------------------------------------------------
+    # Multi-pattern mode
+    # ------------------------------------------------------------------
 
-        if not await self.perceive(observation):
-            return Action(kind=ActionType.SKIP, api_calls=1)
+    def _build_selector_prompt(self, observation: str) -> str:
+        """Build a mode-selection prompt listing available patterns."""
+        lines = [
+            f"以下の観測を読み、あなた（{self.persona.name}）として"
+            "どの行動パターンが最も適切か選んでください。\n",
+            "利用可能なパターン:",
+        ]
+        for i, (name, pattern) in enumerate(self.patterns.items(), 1):
+            lines.append(
+                f"{i}. {name} — {pattern.label}：{pattern.description.strip()}"
+            )
+        lines.append("0. SKIP — 沈黙する（発言すべきでない場合）")
+        lines.append("")
+        lines.append(
+            "SKIPすべき場合:\n"
+            "- 同じ論点の繰り返しになっている\n"
+            "- あなたが直近で発言しておりまだ他者の反応を待つべき\n"
+            "- bot のみの連続発言が多く人間の入力を待つべき\n"
+        )
+        lines.append("番号のみで答えてください。")
+        lines.append("\n---\n")
+        lines.append(observation)
 
-        action = await self.respond(observation)
-        action.api_calls = 2  # perceive + respond
-        return action
+        return "\n".join(lines)
 
-    async def perceive(self, observation: str) -> bool:
-        """Cheap perception gate using haiku."""
+    async def _select_pattern(self, observation: str) -> str | None:
+        """Select the best UX pattern for the current context.
+
+        Uses the same model as response (sonnet) with full observation.
+        Returns the pattern name, or None for SKIP.
+        """
+        prompt = self._build_selector_prompt(observation)
+        pattern_names = list(self.patterns.keys())
+
+        try:
+            response = await self.client.messages.create(
+                model=self.agent_config.model,
+                max_tokens=16,
+                system=self._system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            # Extract first number from response
+            m = re.search(r"\d+", text)
+            if not m:
+                logger.warning(
+                    "Pattern select (%s): could not parse '%s'",
+                    self.persona.name, text,
+                )
+                return None
+
+            idx = int(m.group())
+            if idx == 0:
+                logger.info("Pattern select (%s): SKIP", self.persona.name)
+                return None
+            if 1 <= idx <= len(pattern_names):
+                selected = pattern_names[idx - 1]
+                logger.info(
+                    "Pattern select (%s): %s",
+                    self.persona.name, selected,
+                )
+                return selected
+
+            logger.warning(
+                "Pattern select (%s): index %d out of range",
+                self.persona.name, idx,
+            )
+            return None
+        except anthropic.APIError:
+            logger.exception("Pattern select API error (%s)", self.persona.name)
+            return None
+
+    def _effective_actions(self, pattern_name: str | None) -> set[str]:
+        """Compute effective actions for a given pattern."""
+        if pattern_name and pattern_name in self.patterns:
+            pattern = self.patterns[pattern_name]
+            return self._enabled_actions & set(pattern.allowed_actions)
+        return self._enabled_actions
+
+    # ------------------------------------------------------------------
+    # Legacy mode (single perception prompt, YES/NO gate)
+    # ------------------------------------------------------------------
+
+    async def _perceive_legacy(self, observation: str) -> bool:
+        """Perception gate using a single YES/NO prompt (legacy mode)."""
         prompt = (
             self.agent_config.perception.prompt
             + "\n\n"
@@ -154,7 +233,7 @@ class Agent:
 
         try:
             response = await self.client.messages.create(
-                model=self.agent_config.perception.model,
+                model=self.agent_config.model,
                 max_tokens=16,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -170,8 +249,78 @@ class Agent:
             logger.exception("Perception API error (%s)", self.persona.name)
             return False
 
-    async def respond(self, observation: str) -> Action:
-        """Generate response using sonnet with persona system prompt."""
+    # ------------------------------------------------------------------
+    # Core step methods
+    # ------------------------------------------------------------------
+
+    async def step(self, observation: str) -> Action:
+        """Two-phase step: perceive (select pattern) then respond."""
+        if not observation.strip():
+            return Action(kind=ActionType.SKIP)
+
+        # Multi-pattern mode
+        if self.patterns:
+            selected = await self._select_pattern(observation)
+            if selected is None:
+                return Action(kind=ActionType.SKIP, api_calls=1)
+            action = await self._respond_with_pattern(observation, selected)
+            action.api_calls = 2
+            action.pattern = selected
+            return action
+
+        # Legacy mode
+        if not await self._perceive_legacy(observation):
+            return Action(kind=ActionType.SKIP, api_calls=1)
+
+        action = await self._respond_legacy(observation)
+        action.api_calls = 2
+        return action
+
+    async def _respond_with_pattern(
+        self, observation: str, pattern_name: str,
+    ) -> Action:
+        """Generate response with a specific UX pattern applied."""
+        pattern = self.patterns[pattern_name]
+        effective_actions = self._effective_actions(pattern_name)
+        action_instructions = _build_action_instructions(effective_actions)
+
+        prompt = (
+            f"{observation}\n\n"
+            "---\n"
+            f"# 応答戦略\n{self.agent_config.response.prompt}\n\n"
+            f"# 今回の行動パターン: {pattern.label}\n{pattern.response_prompt}\n\n"
+            "# 重要な制約\n"
+            "- 自分の直近の発言と同じ論点・主張・比喩を繰り返さないこと。\n"
+            "- 新しい具体例、別の角度、または他者の発言への直接的な応答で展開すること。\n"
+            "- 繰り返しになるなら ACTION: skip を選ぶこと。\n"
+            "---\n\n"
+            f"{action_instructions}"
+        )
+
+        try:
+            response = await self.client.messages.create(
+                model=self.agent_config.model,
+                max_tokens=768,
+                system=self._system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            action = _parse_action(text, effective_actions)
+            logger.info(
+                "Respond (%s) [%s]: %s%s — %s",
+                self.persona.name,
+                pattern_name,
+                action.kind.value,
+                f" #{action.thread_index}" if action.thread_index else "",
+                action.message[:80] if action.message else "(no message)",
+            )
+            return action
+        except anthropic.APIError:
+            logger.exception("Response API error (%s)", self.persona.name)
+            return Action(kind=ActionType.SKIP)
+
+    async def _respond_legacy(self, observation: str) -> Action:
+        """Generate response using persona system prompt (legacy mode)."""
         action_instructions = _build_action_instructions(self._enabled_actions)
 
         prompt = (
@@ -188,7 +337,7 @@ class Agent:
 
         try:
             response = await self.client.messages.create(
-                model=self.agent_config.response.model,
+                model=self.agent_config.model,
                 max_tokens=768,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
@@ -207,6 +356,10 @@ class Agent:
             logger.exception("Response API error (%s)", self.persona.name)
             return Action(kind=ActionType.SKIP)
 
+    # ------------------------------------------------------------------
+    # Spontaneous posting
+    # ------------------------------------------------------------------
+
     async def step_spontaneous(self, context: str) -> tuple[str | None, int]:
         """Two-phase step for spontaneous posting.
 
@@ -216,14 +369,72 @@ class Agent:
         if not context.strip():
             return None, 0
 
-        if not await self.perceive(context):
+        # Multi-pattern mode: use proactive pattern directly if available
+        if self.patterns:
+            if "proactive" in self.patterns:
+                result = await self._generate_spontaneous_with_pattern(
+                    context, "proactive",
+                )
+                return result, 1  # Single call (no selector needed)
+            # No proactive pattern — use selector
+            selected = await self._select_pattern(context)
+            if selected is None:
+                return None, 1
+            result = await self._generate_spontaneous_with_pattern(
+                context, selected,
+            )
+            return result, 2
+
+        # Legacy mode
+        if not await self._perceive_legacy(context):
             return None, 1
 
-        result = await self._generate_spontaneous(context)
+        result = await self._generate_spontaneous_legacy(context)
         return result, 2
 
-    async def _generate_spontaneous(self, context: str) -> str | None:
-        """Generate a spontaneous topic using the response model."""
+    async def _generate_spontaneous_with_pattern(
+        self, context: str, pattern_name: str,
+    ) -> str | None:
+        """Generate a spontaneous topic using a specific UX pattern."""
+        pattern = self.patterns[pattern_name]
+        prompt = (
+            f"{context}\n\n"
+            "---\n"
+            f"# 応答戦略\n{self.agent_config.response.prompt}\n"
+            f"# 今回の行動パターン: {pattern.label}\n{pattern.response_prompt}\n"
+            "---\n\n"
+            "上記の観測と戦略を踏まえて、新しい話題を提起するか、"
+            "最近の議論に対してあなたらしいコメントを投稿してください。\n"
+            "特に言うべきことがない場合は「SKIP」とだけ返してください。"
+        )
+
+        try:
+            response = await self.client.messages.create(
+                model=self.agent_config.model,
+                max_tokens=768,
+                system=self._system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+
+            if text == "SKIP":
+                logger.debug(
+                    "Spontaneous SKIP (%s) [%s]",
+                    self.persona.name, pattern_name,
+                )
+                return None
+
+            logger.info(
+                "Spontaneous topic (%s) [%s]: %s",
+                self.persona.name, pattern_name, text[:80],
+            )
+            return text
+        except anthropic.APIError:
+            logger.exception("Spontaneous API error (%s)", self.persona.name)
+            return None
+
+    async def _generate_spontaneous_legacy(self, context: str) -> str | None:
+        """Generate a spontaneous topic (legacy mode)."""
         prompt = (
             f"{context}\n\n"
             "---\n"
@@ -236,7 +447,7 @@ class Agent:
 
         try:
             response = await self.client.messages.create(
-                model=self.agent_config.response.model,
+                model=self.agent_config.model,
                 max_tokens=768,
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],

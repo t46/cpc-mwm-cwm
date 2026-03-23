@@ -2,19 +2,11 @@ name: friston
 persona: personas/friston.md
 model: claude-sonnet-4-20250514
 
-perception:
-  prompt: >
-    以下の観測を読み、あなた（理論神経科学者・自由エネルギー原理）として
-    発言すべき状況かどうか判断してください。
-    以下に該当する場合 YES:
-    - 自由エネルギー原理、予測符号化、能動推論に関連する議論がある
-    - 自己組織化、ベイズ推論、生成モデルに関する話題がある
-    - 議論を統一的枠組みで整理できる可能性がある
-    - 新しい文脈が追加されている
-    以下の場合は NO:
-    - 同じ論点の繰り返しになっている
-    - あなたが直近で発言しておりまだ他者の反応を待つべき
-    - bot のみの連続発言が多く人間の入力を待つべき
+patterns:
+  - socrates
+  - observer
+  - router
+  - notebook
 
 response:
   prompt: >
