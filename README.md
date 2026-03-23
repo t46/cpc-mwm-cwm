@@ -54,7 +54,9 @@ Slack API ダッシュボード
     └─► App-Level Token (xapp-...)        ← MWM のリアルタイム通信に使用
 ```
 
-#### 方法 A: 自動セットアップ
+#### 方法 A: スクリプトで App を作成
+
+スクリプトで App の作成と `.env` テンプレートの生成を行います。**ただし、トークンの取得とワークスペースへのインストールは手動が必要です**（Slack API の制約）。
 
 ```bash
 export SLACK_CONFIG_TOKEN=xoxe.xoxp-...  # https://api.slack.com/apps で取得
@@ -63,7 +65,13 @@ export SLACK_CONFIG_TOKEN=xoxe.xoxp-...  # https://api.slack.com/apps で取得
 
 > Configuration Token は [Slack API ダッシュボード](https://api.slack.com/apps)下部の「Your Config Tokens」から生成できます。
 
-#### 方法 B: 手動セットアップ
+スクリプト実行後、以下の手動ステップが必要です:
+
+1. **App-Level Token の生成**: スクリプトが表示する URL にアクセスし、下記「Socket Mode の有効化」の手順に従う
+2. **ワークスペースへのインストール**: 下記「ワークスペースにインストール」の手順に従う
+3. **`.env` の編集**: 取得したトークンを `.env` に設定
+
+#### 方法 B: すべて手動でセットアップ
 
 1. [Slack API](https://api.slack.com/apps) → 「Create New App」→「From an app manifest」
 2. `slack-app-manifest.yml` の内容を貼り付け
