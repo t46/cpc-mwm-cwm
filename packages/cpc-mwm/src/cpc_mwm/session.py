@@ -182,8 +182,17 @@ class SessionManager:
             m for m in session.bot_messages
             if m.timestamp > last_post_at
         ]
-        # Respond if: new transcript, new discussion, or other bots said something
-        return len(new_chunks) >= 3 or len(new_discussion) >= 1 or len(new_bot_msgs) >= 1
+        new_channel_msgs = [
+            m for m in self.channel_history
+            if m.timestamp > last_post_at and not m.is_bot
+        ]
+        # Respond if: new transcript, new discussion, other bots, or human channel messages
+        return (
+            len(new_chunks) >= 3
+            or len(new_discussion) >= 1
+            or len(new_bot_msgs) >= 1
+            or len(new_channel_msgs) >= 1
+        )
 
 
     def get_thread_candidates(self, persona_name: str, config: MwmConfig) -> list[Message]:
@@ -193,14 +202,20 @@ class SessionManager:
         replies or are from other personas, with fewer than max_thread_replies.
         """
         session = self.current_session
-        if not session or not session.bot_messages:
+        if not session:
             return []
 
         now = datetime.now()
         max_age = config.thread_target_max_age_seconds
 
+        # Merge bot messages and human channel messages for thread candidates
+        all_top_level = list(session.bot_messages) + [
+            m for m in self.channel_history if not m.is_bot
+        ]
+        all_top_level.sort(key=lambda m: m.timestamp)
+
         candidates: list[Message] = []
-        for msg in reversed(session.bot_messages):
+        for msg in reversed(all_top_level):
             age = (now - msg.timestamp).total_seconds()
             if age > max_age:
                 break
@@ -213,9 +228,9 @@ class SessionManager:
             if reply_count >= config.max_thread_replies:
                 continue
 
-            # Include if: from another persona, OR has human replies
+            # Include if: from another persona, has human replies, OR is a human message
             has_human_reply = any(not r.is_bot for r in replies)
-            if msg.user != persona_name or has_human_reply:
+            if msg.user != persona_name or has_human_reply or not msg.is_bot:
                 candidates.append(msg)
 
         return candidates
@@ -261,15 +276,21 @@ class SessionManager:
             parts.append("")
 
         # Bot channel messages (last 15), showing thread structure
-        if session.bot_messages:
-            recent_bot = session.bot_messages[-15:]
-            parts.append(f"## bot チャンネルの議論（最新{len(recent_bot)}件）")
-            for msg in recent_bot:
+        # Merge bot_messages and human channel messages, sorted by time
+        all_channel = list(session.bot_messages) + [
+            m for m in self.channel_history if not m.is_bot
+        ]
+        all_channel.sort(key=lambda m: m.timestamp)
+        recent_channel = all_channel[-15:]
+        if recent_channel:
+            parts.append(f"## bot チャンネルの議論（最新{len(recent_channel)}件）")
+            for msg in recent_channel:
                 ts = msg.timestamp.strftime("%H:%M:%S") if msg.timestamp else ""
+                prefix = "" if msg.is_bot else "[human] "
                 if msg.thread_ts:
-                    parts.append(f"  ↳ [{ts}] {msg.user}: {msg.text}")
+                    parts.append(f"  ↳ [{ts}] {prefix}{msg.user}: {msg.text}")
                 else:
-                    parts.append(f"[{ts}] {msg.user}: {msg.text}")
+                    parts.append(f"[{ts}] {prefix}{msg.user}: {msg.text}")
             parts.append("")
 
         # Thread candidates
