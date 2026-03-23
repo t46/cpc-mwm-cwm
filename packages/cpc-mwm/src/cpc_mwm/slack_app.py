@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import signal
 from typing import TYPE_CHECKING
 
 from slack_bolt.app.async_app import AsyncApp
@@ -97,7 +99,10 @@ def register_handlers(
 
             if text.strip() == "!session end":
                 session_mgr.end_session()
-                await safe_post(client, config, "セッションを終了しました。")
+                await safe_post(client, config, "セッションを終了しました。プロセスを停止します。")
+                logger.info("Shutting down after !session end")
+                await asyncio.sleep(1)
+                signal.raise_signal(signal.SIGTERM)
                 return
 
             if text.strip() == "!session status":
