@@ -2,8 +2,8 @@
 
 研究合宿のための AI ツールキット。2つのシステムを統合:
 
-- **CWM** (Collective White paper Making) — Slack の議論からホワイトペーパーを自動生成
-- **MWM** (Multi-agent White paper Meeting) — AI ペルソナが Slack 上で議論に参加
+- **CWM** (Collective World Model) — Slack の議論からホワイトペーパーを自動生成
+- **MWM** (My World Model) — AI ペルソナが Slack 上で議論に参加
 
 ```
 Slack チャンネルの議論
