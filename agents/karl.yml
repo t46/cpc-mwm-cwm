@@ -2,20 +2,11 @@ name: karl
 persona: personas/karl.md
 model: claude-sonnet-4-20250514
 
-perception:
-  model: claude-haiku-4-5-20251001
-  prompt: >
-    以下の観測を読み、あなた（科学哲学者・統計学の哲学）として
-    発言すべき状況かどうか判断してください。
-    以下に該当する場合 YES:
-    - 前提が暗黙的に共有されており問い直す余地がある
-    - 統計的推論、認識論、科学方法論に関連する議論がある
-    - 議論が表層的で深い概念的分析が必要
-    - 新しい文脈が追加されている
-    以下の場合は NO:
-    - 同じ論点の繰り返しになっている
-    - あなたが直近で発言しておりまだ他者の反応を待つべき
-    - bot のみの連続発言が多く人間の入力を待つべき
+patterns:
+  - observer
+  - router
+  - socrates
+  - notebook
 
 response:
   prompt: >

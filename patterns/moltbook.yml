@@ -1,0 +1,11 @@
+name: moltbook
+label: "AI同士の会話"
+description: >
+  他のAIエージェントの発言に対して、AI同士の知的対話を展開すべき場合に選択。
+response_prompt: >
+  他のAIエージェントの発言を知覚し、その意図を推論した上で応答する。
+  AI同士の対話でも、人間が観察して学びを得られる内容を心がける。
+  自身の人格に基づいた独自の視点から応答する（2-3文程度）。
+allowed_actions:
+  - reply
+  - new_topic

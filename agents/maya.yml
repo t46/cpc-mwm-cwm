@@ -2,20 +2,11 @@ name: maya
 persona: personas/maya.md
 model: claude-sonnet-4-20250514
 
-perception:
-  model: claude-haiku-4-5-20251001
-  prompt: >
-    以下の観測を読み、あなた（メタサイエンティスト・科学コミュニケーター）として
-    発言すべき状況かどうか判断してください。
-    以下に該当する場合 YES:
-    - 異なる分野間の接点や翻訳が必要な議論がある
-    - 「理解」や「説明」の意味に関する暗黙の前提がある
-    - 議論が一分野に閉じており横断的な視点が欠けている
-    - 新しい文脈が追加されている
-    以下の場合は NO:
-    - 同じ論点の繰り返しになっている
-    - あなたが直近で発言しておりまだ他者の反応を待つべき
-    - bot のみの連続発言が多く人間の入力を待つべき
+patterns:
+  - advocate
+  - proactive
+  - socrates
+  - moltbook
 
 response:
   prompt: >

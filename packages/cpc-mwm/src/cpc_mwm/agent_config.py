@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class PerceptionConfig:
-    prompt: str
-    model: str = "claude-haiku-4-5-20251001"
+    prompt: str = ""
+    model: str = "claude-sonnet-4-20250514"
 
 
 @dataclass
@@ -24,7 +24,7 @@ class ActionConfig:
 
 @dataclass
 class ResponseConfig:
-    prompt: str
+    prompt: str = ""
     model: str = "claude-sonnet-4-20250514"
 
 
@@ -36,6 +36,7 @@ class AgentConfig:
     perception: PerceptionConfig
     response: ResponseConfig
     actions: dict[str, ActionConfig] = field(default_factory=dict)
+    patterns: list[str] = field(default_factory=list)
 
 
 def _resolve_prompt(value: str, base_dir: Path) -> str:
@@ -87,6 +88,9 @@ def load_agent_config(path: str | Path) -> AgentConfig:
         else:
             actions[action_name] = ActionConfig(enabled=bool(action_data))
 
+    # Patterns — list of UX pattern names
+    patterns = raw.get("patterns", [])
+
     config = AgentConfig(
         name=raw["name"],
         persona=raw["persona"],
@@ -94,11 +98,13 @@ def load_agent_config(path: str | Path) -> AgentConfig:
         perception=perception,
         response=response,
         actions=actions,
+        patterns=patterns,
     )
     logger.info(
-        "Loaded agent config: %s (persona=%s, actions=%s)",
+        "Loaded agent config: %s (persona=%s, patterns=%s, actions=%s)",
         config.name,
         config.persona,
+        config.patterns or "(legacy)",
         [k for k, v in config.actions.items() if v.enabled],
     )
     return config

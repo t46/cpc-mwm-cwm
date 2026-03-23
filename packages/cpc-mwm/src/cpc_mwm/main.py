@@ -12,6 +12,7 @@ from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from agent_utils.persona import load_persona
 from cpc_mwm.agent import ActionType, Agent
 from cpc_mwm.agent_config import load_agent_config
+from cpc_mwm.pattern_config import load_patterns
 from cpc_mwm.config import MwmConfig
 from cpc_mwm.session import SessionManager
 from cpc_mwm.slack_app import create_slack_app, register_handlers, safe_post
@@ -159,11 +160,36 @@ def load_agents(config: MwmConfig) -> list[Agent]:
     else:
         paths = [config.agent_config]
 
-    agents: list[Agent] = []
+    # Load agent configs first to collect all pattern names
+    agent_configs = []
     for path in paths:
-        agent_cfg = load_agent_config(path)
+        agent_configs.append(load_agent_config(path))
+
+    # Load shared patterns
+    all_pattern_names: set[str] = set()
+    for agent_cfg in agent_configs:
+        all_pattern_names.update(agent_cfg.patterns)
+
+    shared_patterns = {}
+    if all_pattern_names:
+        patterns_dir = Path("patterns")
+        shared_patterns = load_patterns(list(all_pattern_names), patterns_dir)
+        logger.info(
+            "Loaded %d patterns: %s",
+            len(shared_patterns),
+            ", ".join(shared_patterns.keys()),
+        )
+
+    # Build agents with their pattern subsets
+    agents: list[Agent] = []
+    for agent_cfg in agent_configs:
         persona = load_persona(agent_cfg.persona, whitepaper_content=whitepaper_content)
-        agents.append(Agent(agent_cfg, persona, config))
+        agent_patterns = {
+            k: shared_patterns[k]
+            for k in agent_cfg.patterns
+            if k in shared_patterns
+        }
+        agents.append(Agent(agent_cfg, persona, config, patterns=agent_patterns))
     return agents
 
 
