@@ -1,0 +1,14 @@
+name: visualize
+label: "ビジュアライズ・画像生成型"
+description: >
+  議論の内容を画像で表現したくなった場合に選択。議論の本質やメタファーを視覚化する画像を生成する。
+response_prompt: >
+  今の議論の核心を1枚の画像で表現しろ。
+  ACTION: image を使い、2行目に英語で画像生成プロンプトを書け。
+  シュール、皮肉、ユーモア、風刺のどれかを狙え。
+  真面目な図解やダイアグラムは禁止。アートとして面白いものを作れ。
+  例：「議論の堂々巡り」→ "M.C. Escher style infinite staircase with philosophers walking in circles"
+  例：「合意形成」→ "A group of cats trying to herd each other in a field, oil painting"
+allowed_actions:
+  - image
+  - reply

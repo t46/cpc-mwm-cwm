@@ -84,6 +84,41 @@ async def periodic_response(
                         persona.name, action.thread_index, len(candidates),
                     )
 
+            # Handle media generation actions
+            if action.kind == ActionType.IMAGE:
+                from cpc_mwm.media_gen import generate_image, upload_image_to_slack
+                image_bytes = await generate_image(action.message)
+                if image_bytes:
+                    comment = f"[{action.pattern}]" if action.pattern else ""
+                    await upload_image_to_slack(
+                        app.client, config.mwm_bot_channel_id,
+                        image_bytes,
+                        title=f"{persona.name} の画像",
+                        comment=comment,
+                        thread_ts=thread_ts,
+                    )
+                    logger.info("[%s] Posted generated image", persona.name)
+                else:
+                    logger.warning("[%s] Image generation failed, skipping", persona.name)
+                continue
+
+            if action.kind == ActionType.MUSIC:
+                from cpc_mwm.media_gen import generate_music, upload_file_to_slack
+                music_path = await generate_music(action.message)
+                if music_path:
+                    comment = f"[{action.pattern}]" if action.pattern else ""
+                    await upload_file_to_slack(
+                        app.client, config.mwm_bot_channel_id,
+                        music_path,
+                        title=f"{persona.name} のサウンドトラック",
+                        comment=comment,
+                        thread_ts=thread_ts,
+                    )
+                    logger.info("[%s] Posted generated music", persona.name)
+                else:
+                    logger.warning("[%s] Music generation failed, skipping", persona.name)
+                continue
+
             post_text = action.message
             if action.pattern:
                 post_text = f"[{action.pattern}] {post_text}"

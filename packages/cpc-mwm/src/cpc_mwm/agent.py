@@ -81,6 +81,8 @@ class ActionType(Enum):
     REPLY = "reply"
     NEW_TOPIC = "new_topic"
     SKIP = "skip"
+    IMAGE = "image"  # Generate and post an image
+    MUSIC = "music"  # Generate and post music
 
 
 @dataclass
@@ -119,6 +121,16 @@ def _parse_action(text: str, enabled_actions: set[str]) -> Action:
         if re.match(r"ACTION:\s*new_topic", first_line, re.IGNORECASE):
             return Action(kind=ActionType.NEW_TOPIC, message=message)
 
+    # ACTION: image <prompt>
+    if "image" in enabled_actions:
+        if re.match(r"ACTION:\s*image", first_line, re.IGNORECASE):
+            return Action(kind=ActionType.IMAGE, message=message)
+
+    # ACTION: music <prompt>
+    if "music" in enabled_actions:
+        if re.match(r"ACTION:\s*music", first_line, re.IGNORECASE):
+            return Action(kind=ActionType.MUSIC, message=message)
+
     # Fallback: treat entire text as a new topic (backward compat)
     if text.strip() == "SKIP":
         return Action(kind=ActionType.SKIP)
@@ -140,6 +152,14 @@ def _build_action_instructions(enabled_actions: set[str]) -> str:
     if "new_topic" in enabled_actions:
         parts.append("- ACTION: new_topic — 新しいトピックを立てる")
         examples.append("ACTION: new_topic\n一つ気になっていることがあります。...")
+
+    if "image" in enabled_actions:
+        parts.append("- ACTION: image — 議論を画像で表現する（2行目に英語の画像生成プロンプト）")
+        examples.append("ACTION: image\nA surreal painting of five philosophers arguing inside a giant brain")
+
+    if "music" in enabled_actions:
+        parts.append("- ACTION: music — 議論を音楽で表現する（2行目に英語の音楽生成プロンプト）")
+        examples.append("ACTION: music\nA jazzy philosophical debate between AI and humans about consciousness")
 
     parts.append("- ACTION: skip — 沈黙する（発言内容不要）")
     examples.append("ACTION: skip")
@@ -220,7 +240,7 @@ class Agent:
         never voluntarily pick it over serious patterns.
         """
         # Force creative patterns ~20% of the time (LLMs never pick these voluntarily)
-        _CREATIVE_PATTERNS = ["jester", "remix", "wildcard"]
+        _CREATIVE_PATTERNS = ["jester", "remix", "wildcard", "visualize", "soundtrack"]
         available_creative = [p for p in _CREATIVE_PATTERNS if p in self.patterns]
         if available_creative and random.random() < 0.20:
             chosen = random.choice(available_creative)

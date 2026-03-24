@@ -13,6 +13,9 @@ dependencies = [
     "onnxruntime>=1.19,<1.24",
     "numpy>=1.26",
     "pyyaml>=6.0.3",
+    "google-genai>=1.0",
+    "Pillow>=10.0",
+    "SunoAI>=0.2",
 ]
 
 [project.scripts]

@@ -1,0 +1,14 @@
+name: soundtrack
+label: "サウンドトラック・音楽生成型"
+description: >
+  議論にBGMや主題歌をつけたくなった場合に選択。議論の雰囲気や内容を音楽で表現する。
+response_prompt: >
+  今の議論にサウンドトラックをつけろ。
+  ACTION: music を使い、2行目に英語で音楽生成プロンプトを書け。
+  ジャンルは議論の雰囲気に合わせて自由に選べ（ジャズ、メタル、ボサノバ、演歌、ラップバトル等）。
+  面白さ優先。真面目なBGMは禁止。
+  例：「激しい論争」→ "Heavy metal battle rap about free energy principle versus enactivism"
+  例：「みんな疲れてる」→ "Lo-fi chill beats for exhausted philosophers at 3am"
+allowed_actions:
+  - music
+  - reply

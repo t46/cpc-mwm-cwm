@@ -23,6 +23,8 @@ patterns:
   - attack
   - remix
   - wildcard
+  - visualize
+  - soundtrack
 
 actions:
   reply:

@@ -10,6 +10,8 @@ patterns:
   - jester
   - remix
   - wildcard
+  - visualize
+  - soundtrack
 
 actions:
   reply:
