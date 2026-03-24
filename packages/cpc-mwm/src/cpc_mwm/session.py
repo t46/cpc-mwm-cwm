@@ -275,6 +275,10 @@ class SessionManager:
                 parts.append(f"[{ts}] {prefix}{msg.user}: {msg.text}")
             parts.append("")
 
+        # Thread candidates (compute early so we can label bot channel messages)
+        candidates = self.get_thread_candidates(persona_name, config)
+        candidate_ts_to_idx = {msg.ts: i for i, msg in enumerate(candidates, 1)}
+
         # Bot channel messages (last 15), showing thread structure
         # Merge bot_messages and human channel messages, sorted by time
         all_channel = list(session.bot_messages) + [
@@ -288,15 +292,20 @@ class SessionManager:
                 ts = msg.timestamp.strftime("%H:%M:%S") if msg.timestamp else ""
                 prefix = "" if msg.is_bot else "[human] "
                 if msg.thread_ts:
-                    parts.append(f"  ↳ [{ts}] {prefix}{msg.user}: {msg.text}")
+                    # Show which thread this reply belongs to
+                    thread_idx = candidate_ts_to_idx.get(msg.thread_ts)
+                    thread_label = f" [スレッド#{thread_idx}]" if thread_idx else ""
+                    parts.append(f"  ↳{thread_label} [{ts}] {prefix}{msg.user}: {msg.text}")
                 else:
-                    parts.append(f"[{ts}] {prefix}{msg.user}: {msg.text}")
+                    # Label top-level messages with their thread candidate number
+                    thread_idx = candidate_ts_to_idx.get(msg.ts)
+                    thread_label = f" 【スレッド#{thread_idx}】" if thread_idx else ""
+                    parts.append(f"[{ts}]{thread_label} {prefix}{msg.user}: {msg.text}")
             parts.append("")
 
-        # Thread candidates
-        candidates = self.get_thread_candidates(persona_name, config)
+        # Thread candidates summary
         if candidates:
-            parts.append("## エンゲージ可能なスレッド")
+            parts.append("## エンゲージ可能なスレッド（ACTION: reply <番号> で返信）")
             for i, msg in enumerate(candidates, 1):
                 replies = [m for m in session.bot_messages if m.thread_ts == msg.ts]
                 reply_count = len(replies)
@@ -306,6 +315,15 @@ class SessionManager:
             parts.append("")
         else:
             parts.append("## エンゲージ可能なスレッド\nなし（新しいトピックを立てるか、SKIP してください）\n")
+
+        # Action routing guidance
+        parts.append("## ACTION選択の指針")
+        parts.append(
+            "- セッションチャンネルの議論（発表・トランスクリプト含む）への反応 → ACTION: new_topic でトップレベルに投稿せよ。\n"
+            "- bot チャンネル内の既存メッセージ（他のbotの発言やスレッド内の議論）への返信 → ACTION: reply でスレッド返信せよ。\n"
+            "- 判断基準：あなたが反応している対象が「セッションチャンネル由来」か「botチャンネル由来」かで使い分けること。"
+        )
+        parts.append("")
 
         # Own recent posts (for repetition avoidance)
         own_recent = [m for m in session.bot_messages if m.user == persona_name][-5:]

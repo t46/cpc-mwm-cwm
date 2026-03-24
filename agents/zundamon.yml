@@ -1,0 +1,29 @@
+name: zundamon
+persona: personas/zundamon.md
+model: claude-sonnet-4-20250514
+
+patterns:
+  # 既存パターン
+  - observer
+  - advocate
+  - socrates
+  - router
+  - proactive
+  - jester
+  - notebook
+  - shadow
+  - summoner
+  - moltbook
+  # 新規パターン
+  - delta
+  - triage
+  - curiosity
+  - nod
+  - wow
+  - attack
+
+actions:
+  reply:
+    enabled: true
+  new_topic:
+    enabled: true

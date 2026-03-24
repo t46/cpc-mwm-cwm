@@ -234,8 +234,18 @@ class Agent:
                 system=self._system_prompt,
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = response.content[0].text.strip()
-            # Extract first number from response
+            text = response.content[0].text.strip().lower()
+
+            # Try matching by pattern name first
+            for name in pattern_names:
+                if name.lower() == text:
+                    logger.info(
+                        "Pattern select (%s): %s (by name)",
+                        self.persona.name, name,
+                    )
+                    return name
+
+            # Fall back to number extraction
             m = re.search(r"\d+", text)
             if not m:
                 logger.warning(

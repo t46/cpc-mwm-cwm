@@ -62,6 +62,8 @@ async def periodic_response(
 
         # Build observation and let the agent decide (perceive + respond)
         observation = session_mgr.build_observation(persona.name, config)
+        logger.info("[%s] Observation length: %d chars\n%s",
+                    persona.name, len(observation), observation)
         action = await agent.step(observation)
         for _ in range(action.api_calls):
             session_mgr.record_api_call()
@@ -231,14 +233,17 @@ def load_agents(
     return agents
 
 
-async def main(whitepaper_override: str | None = None, agent_config_override: str | None = None) -> None:
+async def main(
+    whitepaper_override: str | None = None,
+    agent_config_override: list[str] | None = None,
+) -> None:
     """Entry point for the camp bot."""
     config = MwmConfig()
     if whitepaper_override:
         config.whitepaper_path = whitepaper_override
     if agent_config_override:
-        config.agent_config = agent_config_override
-        config.agent_configs = ""  # CLI override takes precedence
+        config.agent_configs = ",".join(agent_config_override)
+        config.agent_config = agent_config_override[0]  # fallback field
 
     session_mgr = SessionManager()
     agents = load_agents(config, session_mgr=session_mgr)
@@ -288,8 +293,9 @@ def cli() -> None:
     )
     parser.add_argument(
         "--agent-config",
+        nargs="+",
         default=None,
-        help="エージェント設定 YAML ファイルパス（デフォルト: agents/ada.yml）",
+        help="エージェント設定 YAML ファイルパス（複数指定可）",
     )
     args = parser.parse_args()
     asyncio.run(main(whitepaper_override=args.whitepaper, agent_config_override=args.agent_config))
