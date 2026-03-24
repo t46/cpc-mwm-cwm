@@ -82,8 +82,12 @@ async def periodic_response(
                         persona.name, action.thread_index, len(candidates),
                     )
 
+            post_text = action.message
+            if action.pattern:
+                post_text = f"[{action.pattern}] {post_text}"
+
             posted_ts = await safe_post(
-                app.client, config, action.message,
+                app.client, config, post_text,
                 persona=persona, thread_ts=thread_ts,
             )
             now = datetime.now()
@@ -138,13 +142,16 @@ async def spontaneous_posting(
             continue
 
         context = session_mgr.get_spontaneous_context()
-        comment, api_calls = await agent.step_spontaneous(context)
+        comment, api_calls, pattern_name = await agent.step_spontaneous(context)
         for _ in range(api_calls):
             session_mgr.record_api_call()
 
         if comment:
             try:
-                await safe_post(app.client, config, comment, persona=persona)
+                post_text = comment
+                if pattern_name:
+                    post_text = f"[{pattern_name}] {post_text}"
+                await safe_post(app.client, config, post_text, persona=persona)
                 session_mgr.record_spontaneous_post()
                 logger.info("[%s] Posted spontaneous topic", persona.name)
             except Exception:

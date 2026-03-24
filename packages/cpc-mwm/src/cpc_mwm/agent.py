@@ -406,14 +406,14 @@ class Agent:
     # Spontaneous posting
     # ------------------------------------------------------------------
 
-    async def step_spontaneous(self, context: str) -> tuple[str | None, int]:
+    async def step_spontaneous(self, context: str) -> tuple[str | None, int, str]:
         """Two-phase step for spontaneous posting.
 
         Returns:
-            Tuple of (comment text or None, number of API calls made).
+            Tuple of (comment text or None, number of API calls made, pattern name).
         """
         if not context.strip():
-            return None, 0
+            return None, 0, ""
 
         # Multi-pattern mode: use proactive pattern directly if available
         if self.patterns:
@@ -421,22 +421,22 @@ class Agent:
                 result = await self._generate_spontaneous_with_pattern(
                     context, "proactive",
                 )
-                return result, 1  # Single call (no selector needed)
+                return result, 1, "proactive"  # Single call (no selector needed)
             # No proactive pattern — use selector
             selected = await self._select_pattern(context)
             if selected is None:
-                return None, 1
+                return None, 1, ""
             result = await self._generate_spontaneous_with_pattern(
                 context, selected,
             )
-            return result, 2
+            return result, 2, selected
 
         # Legacy mode
         if not await self._perceive_legacy(context):
-            return None, 1
+            return None, 1, ""
 
         result = await self._generate_spontaneous_legacy(context)
-        return result, 2
+        return result, 2, ""
 
     async def _generate_spontaneous_with_pattern(
         self, context: str, pattern_name: str,

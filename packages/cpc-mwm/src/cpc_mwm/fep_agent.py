@@ -90,10 +90,10 @@ class FEPAgent:
 
         return action
 
-    async def step_spontaneous(self, context: str) -> tuple[str | None, int]:
+    async def step_spontaneous(self, context: str) -> tuple[str | None, int, str]:
         """Spontaneous posting via FEP cycle."""
         if not context.strip():
-            return None, 0
+            return None, 0, ""
 
         cwm_context = self._get_cwm_context()
 
@@ -101,16 +101,16 @@ class FEPAgent:
             perception = await self._perceive(context, cwm_context)
 
         if not perception.has_error:
-            return None, 1
+            return None, 1, ""
 
         async with self._config_lock:
             action = await self._respond(context, cwm_context, perception)
 
         if action.kind == ActionType.SKIP or not action.message:
-            return None, 2
+            return None, 2, ""
 
         self._schedule_reflection(context, cwm_context, perception, action.message)
-        return action.message, 2
+        return action.message, 2, ""
 
     async def _perceive(self, observation: str, cwm_context: str) -> PredictionError:
         """Evaluate prediction error against generative model."""
