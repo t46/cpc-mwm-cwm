@@ -9,6 +9,8 @@ patterns:
   - router
   - observer
   - jester
+  - remix
+  - wildcard
 
 actions:
   reply:

@@ -8,6 +8,8 @@ patterns:
   - socrates
   - router
   - jester
+  - remix
+  - wildcard
 
 actions:
   reply:

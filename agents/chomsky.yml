@@ -8,6 +8,8 @@ patterns:
   - socrates
   - notebook
   - jester
+  - remix
+  - wildcard
 
 actions:
   reply:

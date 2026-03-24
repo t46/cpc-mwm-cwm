@@ -21,6 +21,8 @@ patterns:
   - nod
   - wow
   - attack
+  - remix
+  - wildcard
 
 actions:
   reply:

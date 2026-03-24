@@ -8,6 +8,8 @@ patterns:
   - router
   - notebook
   - jester
+  - remix
+  - wildcard
 
 actions:
   reply:

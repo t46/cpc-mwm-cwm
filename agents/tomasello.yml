@@ -8,6 +8,8 @@ patterns:
   - socrates
   - moltbook
   - jester
+  - remix
+  - wildcard
 
 actions:
   reply:
